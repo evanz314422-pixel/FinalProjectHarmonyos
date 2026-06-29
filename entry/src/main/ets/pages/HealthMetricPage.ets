@@ -74,13 +74,13 @@ struct HealthMetricPage {
       Column({ space: 16 }) {
         this.Header('健康监测')
         this.DeviceConnectCard()
-        this.HeartRateCard()
-        this.RoutineMetricCard()
         this.AlertCard()
         this.SectionTitle('最近指标')
         ForEach(healthMetrics, (item: HealthMetric) => {
           this.MetricRow(item)
         }, (item: HealthMetric) => item.name + item.time + item.value + this.refreshToken.toString())
+        this.HeartRateCard()
+        this.RoutineMetricCard()
       }
       .padding(18)
     }
@@ -205,15 +205,40 @@ struct HealthMetricPage {
   }
 
   @Builder AlertCard() {
-    Column({ space: 8 }) {
-      Text('异常记录')
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(healthAlerts.length > 0 ? '#B42318' : '#0B7A5B')
-      Text(healthAlerts.length > 0 ? healthAlerts[0].title + '：' + healthAlerts[0].value + '，已提醒监护人。' : '当前没有异常生命体征。')
+    Column({ space: 12 }) {
+      Row() {
+        Text(healthAlerts.length > 0 ? '需要关注' : '状态平稳')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(healthAlerts.length > 0 ? '#B42318' : '#0B7A5B')
+        Blank()
+        Text(healthAlerts.length > 0 ? '已通知家属' : '正常')
+          .fontSize(14)
+          .fontColor(healthAlerts.length > 0 ? '#B42318' : '#0B7A5B')
+      }
+      .width('100%')
+      Text(healthAlerts.length > 0 ? healthAlerts[0].title + '：' + healthAlerts[0].value + '。建议先坐下休息，几分钟后复测一次。' : '当前没有异常生命体征，继续保持定期记录。')
         .fontSize(16)
         .lineHeight(24)
         .fontColor('#52635F')
+      Row({ space: 10 }) {
+        Button('复测一次')
+          .layoutWeight(1)
+          .height(46)
+          .fontSize(17)
+          .borderRadius(16)
+          .backgroundColor('#0B7A5B')
+          .onClick(() => promptAction.showToast({ message: '请休息后重新记录心率（模拟）' }))
+        Button('联系家属')
+          .layoutWeight(1)
+          .height(46)
+          .fontSize(17)
+          .borderRadius(16)
+          .fontColor('#B42318')
+          .backgroundColor('#FFFFFF')
+          .onClick(() => router.pushUrl({ url: 'pages/FamilyAssistPage' }))
+      }
+      .width('100%')
     }
     .width('100%')
     .padding(18)
@@ -243,6 +268,9 @@ struct HealthMetricPage {
         Text(item.normal ? '正常' : '异常')
           .fontSize(14)
           .fontColor(item.normal ? '#0B7A5B' : '#B42318')
+        Text(item.normal ? '继续保持' : '建议复测')
+          .fontSize(13)
+          .fontColor(item.normal ? '#667085' : '#B42318')
       }
       .alignItems(HorizontalAlign.End)
     }

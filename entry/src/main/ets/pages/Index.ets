@@ -71,13 +71,24 @@ struct Index {
   }
 
   private lowStockText(): string {
+    return this.lowStockCount().toString() + '种';
+  }
+
+  private lowStockCount(): number {
     let count: number = 0;
     for (let index = 0; index < medicines.length; index++) {
       if (medicines[index].stock <= medicines[index].threshold) {
         count++;
       }
     }
-    return count.toString() + '种';
+    return count;
+  }
+
+  private lowStockWarningText(): string {
+    if (this.lowStockCount() === 0) {
+      return '当前常用药库存充足。';
+    }
+    return '有 ' + this.lowStockCount().toString() + ' 种药快吃完，请及时补充或让家属帮忙处理。';
   }
 
   private latestHeartRateText(): string {
@@ -159,19 +170,14 @@ struct Index {
       .tabBar(this.NavItem('药品', '库存', 1))
 
       TabContent() {
-        this.ElderPlanTab()
-      }
-      .tabBar(this.NavItem('计划', '提醒', 2))
-
-      TabContent() {
         this.ElderHealthTab()
       }
-      .tabBar(this.NavItem('健康', '指标', 3))
+      .tabBar(this.NavItem('健康', '指标', 2))
 
       TabContent() {
         this.ElderMineTab()
       }
-      .tabBar(this.NavItem('我的', '设置', 4))
+      .tabBar(this.NavItem('我的', '设置', 3))
     }
     .width('100%')
     .height('100%')
@@ -249,27 +255,29 @@ struct Index {
   @Builder ElderMedicineTab() {
     Scroll() {
       Column({ space: 16 }) {
-        this.HeaderBlock('药品管理', '可以自己添加，也可以让监护人帮忙维护')
-        Row({ space: 12 }) {
-          this.ActionButton('添加/拍照录药', 'pages/AddMedicinePage')
+        this.HeaderBlock('药品管理', '先看库存，再按需要拍照录药或查看长期计划。')
+        this.LowStockNotice()
+        Row({ space: 10 }) {
+          this.ActionButton('拍照录药', 'pages/AddMedicinePage')
         }
         .width('100%')
-        Row({ space: 12 }) {
-          this.ActionButton('药品库', 'pages/MedicineLibraryPage')
-          this.ActionButton('库存管理', 'pages/InventoryPage')
+        Row({ space: 8 }) {
+          this.QuickEntry('药品库', '常用药', 'pages/MedicineLibraryPage')
+          this.QuickEntry('库存管理', '快吃完', 'pages/InventoryPage')
+          this.QuickEntry('用药计划', '时间表', 'pages/PlanListPage')
         }
         .width('100%')
 
         Column({ space: 10 }) {
-          Text('AI 辅助录药')
+          Text('看不清药盒？拍照帮你识别')
             .fontSize(22)
             .fontWeight(FontWeight.Bold)
             .fontColor('#14213D')
-          Text('看不清药盒时可以拍照识别，识别结果仍需本人或家属核对。')
+          Text('适合药名太小、包装看不清时使用。识别结果仍需本人或家属核对。')
             .fontSize(16)
             .lineHeight(24)
             .fontColor('#52635F')
-          Button('问 AI 用药问题')
+          Button('问用药问题')
             .width('100%')
             .height(50)
             .borderRadius(18)
@@ -283,6 +291,11 @@ struct Index {
         .backgroundColor('#E7F5EF')
         .alignItems(HorizontalAlign.Start)
 
+        this.SectionTitle('用药计划')
+        ForEach(plans, (plan: MedicationPlan) => {
+          this.PlanRow(plan)
+        }, (plan: MedicationPlan) => plan.id.toString())
+
         this.SectionTitle('常用药品')
         ForEach(medicines, (item: Medicine) => {
           this.MedicineRow(item)
@@ -294,55 +307,13 @@ struct Index {
     .height('100%')
   }
 
-  @Builder ElderPlanTab() {
-    Scroll() {
-      Column({ space: 16 }) {
-        this.HeaderBlock('用药计划', '把长期服药安排成清楚的提醒节奏')
-        Column({ space: 10 }) {
-          Text('今日提醒节奏')
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#14213D')
-          Text('早上已完成，中午和晚上还需要提醒。')
-            .fontSize(17)
-            .fontColor('#52635F')
-          Progress({ value: 50, total: 100, type: ProgressType.Linear })
-            .width('100%')
-            .color('#0B7A5B')
-          Row({ space: 12 }) {
-            this.ActionButton('新增计划', 'pages/AddPlanPage')
-            this.ActionButton('服药打卡', 'pages/CheckInPage')
-          }
-          .width('100%')
-        }
-        .width('100%')
-        .padding(18)
-        .borderRadius(24)
-        .backgroundColor('#FFFFFF')
-        .alignItems(HorizontalAlign.Start)
-
-        this.SectionTitle('长期计划')
-        ForEach(plans, (plan: MedicationPlan) => {
-          this.PlanRow(plan)
-        }, (plan: MedicationPlan) => plan.id.toString())
-      }
-      .padding({ left: 18, right: 18, top: 18, bottom: 24 })
-    }
-    .width('100%')
-    .height('100%')
-  }
-
   @Builder ElderHealthTab() {
     Scroll() {
       Column({ space: 16 }) {
-        this.HeaderBlock('健康监测', '记录血压、血糖和心率，手环异常会提醒家属')
+        this.HeaderBlock('健康监测', '先看异常，再记录血压、血糖和心率。')
         this.DeviceCard()
         this.AlertCard()
-        Row({ space: 12 }) {
-          this.ActionButton('健康指标', 'pages/HealthMetricPage')
-          this.ActionButton('紧急联系家属', 'pages/FamilyAssistPage')
-        }
-        .width('100%')
+        this.HealthActionCard()
         this.SectionTitle('最近指标')
         ForEach(healthMetrics, (item: HealthMetric) => {
           this.HealthRow(item.name, item.value, item.time, item.normal)
@@ -357,7 +328,7 @@ struct Index {
   @Builder ElderMineTab() {
     Scroll() {
       Column({ space: 16 }) {
-        this.HeaderBlock('我的', '账号绑定、字体和提醒设置')
+        this.HeaderBlock('我的', '账号绑定、字体和提醒设置。')
         Column({ space: 10 }) {
           Text(getCurrentUser().name)
             .fontSize(28)
@@ -367,7 +338,7 @@ struct Index {
             .fontSize(20)
             .fontWeight(FontWeight.Bold)
             .fontColor('#0B7A5B')
-          Text('监护人可用绑定码关联账号，查看用药记录和健康告警。')
+          Text('把这个码给家属看。家属绑定后，可以帮你查看用药记录和健康告警。')
             .fontSize(16)
             .lineHeight(24)
             .fontColor('#52635F')
@@ -379,7 +350,10 @@ struct Index {
         .alignItems(HorizontalAlign.Start)
 
         this.EntryRow('家属绑定设置', '查看绑定状态和异常通知', 'pages/FamilyAssistPage')
-        this.EntryRow('我的设置', '字体大小、强提醒和本地备份', 'pages/SettingsPage')
+        this.EntryRow('大字模式', '调大字体，看得更清楚', 'pages/SettingsPage')
+        this.EntryRow('强提醒模式', '铃声、震动和稍后提醒', 'pages/SettingsPage')
+        this.EntryRow('紧急联系人', '身体不舒服时快速联系家属', 'pages/FamilyAssistPage')
+        this.EntryRow('我的设置', '本地备份和更多设置', 'pages/SettingsPage')
         Button('退出登录')
           .width('100%')
           .height(52)
@@ -646,6 +620,67 @@ struct Index {
     .alignItems(HorizontalAlign.Start)
   }
 
+  @Builder LowStockNotice() {
+    Column({ space: 8 }) {
+      Row() {
+        Text(this.lowStockCount() > 0 ? '低库存提醒' : '库存状态')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.lowStockCount() > 0 ? '#B54708' : '#0B7A5B')
+        Blank()
+        this.SmallBadge(this.lowStockText(), this.lowStockCount() > 0 ? '#B54708' : '#0B7A5B', this.lowStockCount() > 0 ? '#FFF7E8' : '#E7F5EF')
+      }
+      .width('100%')
+      Text(this.lowStockWarningText())
+        .fontSize(16)
+        .lineHeight(24)
+        .fontColor('#52635F')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
+    .backgroundColor(this.lowStockCount() > 0 ? '#FFF7E8' : '#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder HealthActionCard() {
+    Column({ space: 12 }) {
+      Text(healthAlerts.length > 0 ? '异常处理建议' : '健康记录')
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(healthAlerts.length > 0 ? '#B42318' : '#14213D')
+      Text(healthAlerts.length > 0 ? '心率偏高时先坐下休息，几分钟后复测一次；如果仍不舒服，及时联系家属。' : '没有异常时，定期记录血压、血糖和心率即可。')
+        .fontSize(16)
+        .lineHeight(24)
+        .fontColor('#52635F')
+      Row({ space: 10 }) {
+        Button(healthAlerts.length > 0 ? '复测一次' : '记录指标')
+          .layoutWeight(1)
+          .height(52)
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .borderRadius(18)
+          .backgroundColor('#0B7A5B')
+          .onClick(() => router.pushUrl({ url: 'pages/HealthMetricPage' }))
+        Button('联系家属')
+          .layoutWeight(1)
+          .height(52)
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .borderRadius(18)
+          .fontColor('#B42318')
+          .backgroundColor('#FFF1F0')
+          .onClick(() => router.pushUrl({ url: 'pages/FamilyAssistPage' }))
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
   @Builder DeviceCard() {
     Column({ space: 10 }) {
       Row() {
@@ -750,6 +785,26 @@ struct Index {
       .borderRadius(20)
       .backgroundColor('#0B7A5B')
       .onClick(() => router.pushUrl({ url: url }))
+  }
+
+  @Builder QuickEntry(title: string, desc: string, url: string) {
+    Column({ space: 4 }) {
+      Text(title)
+        .fontSize(17)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#0B7A5B')
+        .maxLines(1)
+      Text(desc)
+        .fontSize(13)
+        .fontColor('#667085')
+        .maxLines(1)
+    }
+    .layoutWeight(1)
+    .height(76)
+    .borderRadius(18)
+    .backgroundColor('#FFFFFF')
+    .justifyContent(FlexAlign.Center)
+    .onClick(() => router.pushUrl({ url: url }))
   }
 
   @Builder TaskRow(item: MedicationRecord) {
