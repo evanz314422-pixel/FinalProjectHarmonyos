@@ -30,6 +30,10 @@ export interface Medicine {
   stock: number;
   threshold: number;
   note: string;
+  photoUri: string;
+  photoLabel: string;
+  photoColor: string;
+  photoUploaded: boolean;
 }
 
 export interface MedicationPlan {
@@ -83,6 +87,20 @@ export interface MenuItem {
   url: string;
 }
 
+export interface CareTodo {
+  title: string;
+  desc: string;
+  level: string;
+  action: string;
+  url: string;
+}
+
+export interface NotificationPreference {
+  title: string;
+  desc: string;
+  enabled: boolean;
+}
+
 export const mockUsers: MockUser[] = [
   { id: 1, name: '张阿姨', phone: '13800000001', role: 'elder' },
   { id: 2, name: '李女士', phone: '13800000002', role: 'guardian', relation: '女儿' }
@@ -114,7 +132,11 @@ export const medicines: Medicine[] = [
     dosage: '1片',
     stock: 18,
     threshold: 10,
-    note: '饭后服用，注意低血糖反应。'
+    note: '饭后服用，注意低血糖反应。',
+    photoUri: '',
+    photoLabel: '二甲',
+    photoColor: '#E7F5EF',
+    photoUploaded: true
   },
   {
     id: 2,
@@ -124,7 +146,11 @@ export const medicines: Medicine[] = [
     dosage: '1片',
     stock: 6,
     threshold: 8,
-    note: '每日固定时间服用，注意监测血压。'
+    note: '每日固定时间服用，注意监测血压。',
+    photoUri: '',
+    photoLabel: '降压',
+    photoColor: '#FFF7E8',
+    photoUploaded: true
   },
   {
     id: 3,
@@ -134,7 +160,11 @@ export const medicines: Medicine[] = [
     dosage: '1片',
     stock: 25,
     threshold: 10,
-    note: '整片吞服，不要嚼碎。'
+    note: '整片吞服，不要嚼碎。',
+    photoUri: '',
+    photoLabel: '阿司',
+    photoColor: '#EAF2FF',
+    photoUploaded: true
   }
 ];
 
@@ -175,6 +205,44 @@ export const healthAlerts: HealthAlert[] = [
   }
 ];
 
+export const careTodos: CareTodo[] = [
+  {
+    title: '确认午间服药',
+    desc: '12:30 二甲双胍片尚未确认，建议电话确认。',
+    level: '高优先级',
+    action: '生成话术',
+    url: 'pages/AIAssistantPage'
+  },
+  {
+    title: '复测心率',
+    desc: '今天 09:18 心率 116 次/分，建议休息后复测。',
+    level: '需关注',
+    action: '查看健康',
+    url: 'pages/HealthMetricPage'
+  },
+  {
+    title: '补充低库存药品',
+    desc: '硝苯地平控释片剩余 6 片，低于提醒阈值。',
+    level: '待处理',
+    action: '去库存',
+    url: 'pages/InventoryPage'
+  },
+  {
+    title: '晚间用药提醒',
+    desc: '18:30 二甲双胍片，建议提前 10 分钟轻提醒。',
+    level: '计划中',
+    action: '看计划',
+    url: 'pages/PlanListPage'
+  }
+];
+
+export const notificationPreferences: NotificationPreference[] = [
+  { title: '漏服通知', desc: '老人超过提醒时间未确认时通知家属', enabled: true },
+  { title: '健康异常通知', desc: '心率、血压或血糖异常时立即提醒', enabled: true },
+  { title: '低库存通知', desc: '常用药低于阈值时提醒补充', enabled: true },
+  { title: '每日汇总通知', desc: '每天晚间发送服药与健康摘要', enabled: false }
+];
+
 export const menus: MenuItem[] = [
   { title: '药品库', desc: '查看和管理常用药品', url: 'pages/MedicineLibraryPage' },
   { title: '新增药品', desc: '录入药名、剂量和库存', url: 'pages/AddMedicinePage' },
@@ -203,17 +271,58 @@ export function getWatchedElderId(): number {
   return 1;
 }
 
-export function addMedicineForElder(name: string, spec: string, dosage: string, stock: number, note: string): void {
+export function getMedicinePhotoLabel(name: string): string {
+  for (let index = 0; index < medicines.length; index++) {
+    if (medicines[index].name === name) {
+      return medicines[index].photoLabel;
+    }
+  }
+  return name.length >= 2 ? name.substring(0, 2) : '药品';
+}
+
+export function getMedicinePhotoColor(name: string): string {
+  for (let index = 0; index < medicines.length; index++) {
+    if (medicines[index].name === name) {
+      return medicines[index].photoColor;
+    }
+  }
+  return '#E7F5EF';
+}
+
+export function getMedicinePhotoUri(name: string): string {
+  for (let index = 0; index < medicines.length; index++) {
+    if (medicines[index].name === name) {
+      return medicines[index].photoUri;
+    }
+  }
+  return '';
+}
+
+export function isMedicinePhotoUploaded(name: string): boolean {
+  for (let index = 0; index < medicines.length; index++) {
+    if (medicines[index].name === name) {
+      return medicines[index].photoUploaded;
+    }
+  }
+  return false;
+}
+
+export function addMedicineForElder(name: string, spec: string, dosage: string, stock: number, note: string, photoUri: string, photoLabel: string, photoColor: string, photoUploaded: boolean): void {
   const nextId: number = medicines.length + 1;
+  const savedName: string = name === '' ? '未命名药品' : name;
   medicines.push({
     id: nextId,
     elderId: getWatchedElderId(),
-    name: name === '' ? '未命名药品' : name,
+    name: savedName,
     spec: spec === '' ? '规格待补充' : spec,
     dosage: dosage === '' ? '按医嘱' : dosage,
     stock: stock,
     threshold: 8,
-    note: note === '' ? '请本人或监护人与医嘱核对后使用。' : note
+    note: note === '' ? '请本人或监护人与医嘱核对后使用。' : note,
+    photoUri: photoUri,
+    photoLabel: photoLabel === '' ? (savedName.length >= 2 ? savedName.substring(0, 2) : '药品') : photoLabel,
+    photoColor: photoColor === '' ? '#E7F5EF' : photoColor,
+    photoUploaded: photoUploaded
   });
 }
 

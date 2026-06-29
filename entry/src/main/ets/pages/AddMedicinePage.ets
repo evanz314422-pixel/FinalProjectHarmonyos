@@ -1,4 +1,5 @@
 import { router, promptAction } from '@kit.ArkUI';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { addMedicineForElder, currentSession } from '../models/AppData';
 
 @Entry
@@ -11,6 +12,10 @@ struct AddMedicinePage {
   @State note: string = '';
   @State aiRecognized: boolean = false;
   @State recognizing: boolean = false;
+  @State photoUri: string = '';
+  @State photoUploaded: boolean = false;
+  @State photoLabel: string = '药品';
+  @State photoColor: string = '#E7F5EF';
 
   private fillRecognizedMedicine(): void {
     this.name = '硝苯地平控释片';
@@ -18,11 +23,38 @@ struct AddMedicinePage {
     this.dosage = '1片';
     this.stock = '7';
     this.note = 'AI识别：常用于血压管理。建议每日固定时间服用，具体用法请以医生处方为准。';
+    this.photoUri = '';
+    this.photoUploaded = true;
+    this.photoLabel = '降压';
+    this.photoColor = '#FFF7E8';
+  }
+
+  private updatePhotoLabelFromName(): void {
+    const sourceName: string = this.name === '' ? '药品' : this.name;
+    this.photoLabel = sourceName.length >= 2 ? sourceName.substring(0, 2) : sourceName;
+  }
+
+  private selectMedicinePhoto(): void {
+    const options = new photoAccessHelper.PhotoSelectOptions();
+    options.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
+    options.maxSelectNumber = 1;
+    const picker = new photoAccessHelper.PhotoViewPicker();
+    picker.select(options).then((result: photoAccessHelper.PhotoSelectResult) => {
+      if (result.photoUris.length > 0) {
+        this.photoUri = result.photoUris[0];
+        this.photoUploaded = true;
+        this.updatePhotoLabelFromName();
+        this.photoColor = this.name === '硝苯地平控释片' ? '#FFF7E8' : '#E7F5EF';
+        promptAction.showToast({ message: '已选择药品照片' });
+      }
+    }).catch(() => {
+      promptAction.showToast({ message: '未选择照片' });
+    });
   }
 
   private saveMedicine(): void {
     const stockValue: number = this.stock === '' ? 0 : Number(this.stock);
-    addMedicineForElder(this.name, this.spec, this.dosage, stockValue, this.note);
+    addMedicineForElder(this.name, this.spec, this.dosage, stockValue, this.note, this.photoUri, this.photoLabel, this.photoColor, this.photoUploaded);
     promptAction.showToast({ message: currentSession.role === 'guardian' ? '已替老人保存药品（模拟）' : '已保存到常用药（模拟）' });
   }
 
@@ -31,6 +63,7 @@ struct AddMedicinePage {
       Column({ space: 16 }) {
         this.Header(currentSession.role === 'guardian' ? '替老人添加药品' : '新增药品')
         this.AiCaptureCard()
+        this.PhotoUploadCard()
         Button('进入 AI 用药助手')
           .width('100%')
           .height(48)
@@ -45,6 +78,9 @@ struct AddMedicinePage {
 
         this.Field('药品名称', '例如：二甲双胍片', this.name, (value: string) => {
           this.name = value;
+          if (!this.photoUploaded) {
+            this.updatePhotoLabelFromName();
+          }
         })
         this.Field('规格包装', '例如：0.5g x 30片', this.spec, (value: string) => {
           this.spec = value;
@@ -164,6 +200,79 @@ struct AddMedicinePage {
     .alignItems(HorizontalAlign.Start)
   }
 
+  @Builder PhotoUploadCard() {
+    Row({ space: 14 }) {
+      Stack() {
+        if (this.photoUri !== '') {
+          Image(this.photoUri)
+            .width(76)
+            .height(76)
+            .borderRadius(20)
+            .objectFit(ImageFit.Cover)
+        } else {
+          Column({ space: 4 }) {
+            Text(this.photoLabel)
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#102A27')
+              .maxLines(1)
+            Text(this.photoUploaded ? '已上传' : '待上传')
+              .fontSize(11)
+              .fontColor('#0B7A5B')
+          }
+          .width(76)
+          .height(76)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+        }
+      }
+      .width(76)
+      .height(76)
+      .borderRadius(20)
+      .backgroundColor(this.photoColor)
+      .border({ width: 2, color: '#FFFFFF' })
+
+      Column({ space: 8 }) {
+        Text('药盒照片')
+          .fontSize(19)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14213D')
+        Text(this.photoUploaded ? '保存后会显示在老人端药品名称旁，方便看图认药。' : '可以上传药盒或药板照片，防止老人看不清药名。')
+          .fontSize(14)
+          .lineHeight(21)
+          .fontColor('#667085')
+        Row({ space: 8 }) {
+          Button(this.photoUploaded ? '重新上传' : '上传照片')
+            .layoutWeight(1)
+            .height(42)
+            .borderRadius(16)
+            .backgroundColor('#0B7A5B')
+            .onClick(() => this.selectMedicinePhoto())
+          Button('用药名生成')
+            .layoutWeight(1)
+            .height(42)
+            .borderRadius(16)
+            .fontColor('#0B7A5B')
+            .backgroundColor('#FFFFFF')
+            .onClick(() => {
+              this.photoUri = '';
+              this.photoUploaded = false;
+              this.updatePhotoLabelFromName();
+              promptAction.showToast({ message: '已用药名生成临时识别图' });
+            })
+        }
+        .width('100%')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(22)
+    .backgroundColor('#FFFFFF')
+    .alignItems(VerticalAlign.Center)
+  }
+
   @Builder RecognitionResultCard() {
     Column({ space: 10 }) {
       Row() {
@@ -181,7 +290,7 @@ struct AddMedicinePage {
       }
       .width('100%')
 
-      Text('识别到：硝苯地平控释片，30mg x 7片。系统已自动填入下方表单。')
+      Text('识别到：硝苯地平控释片，30mg x 7片。系统已自动填入下方表单，并生成药盒图片标识。')
         .fontSize(15)
         .lineHeight(22)
         .fontColor('#475467')

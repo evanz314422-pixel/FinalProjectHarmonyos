@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { MedicationPlan, plans } from '../models/AppData';
+import { getMedicinePhotoColor, getMedicinePhotoLabel, getMedicinePhotoUri, isMedicinePhotoUploaded, MedicationPlan, plans } from '../models/AppData';
 
 @Entry
 @Component
@@ -10,12 +10,14 @@ struct PlanListPage {
         this.Header('用药计划')
         Button('+ 新增计划').width('100%').onClick(() => router.pushUrl({ url: 'pages/AddPlanPage' }))
         ForEach(plans, (plan: MedicationPlan) => {
-          Row() {
+          Row({ space: 12 }) {
+            this.MedicinePhoto(plan.medicineName, 58)
             Column({ space: 6 }) {
               Text(plan.medicineName).fontSize(20).fontWeight(FontWeight.Bold)
               Text(plan.times.join(' / ') + '  ' + plan.dosage + '  ' + plan.mealTime).fontSize(14).fontColor('#667085')
-            }.alignItems(HorizontalAlign.Start)
-            Blank()
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
             Text(plan.enabled ? '启用' : '暂停').fontColor(plan.enabled ? '#0E7C66' : '#98A2B3')
           }
           .width('100%')
@@ -34,5 +36,27 @@ struct PlanListPage {
       Blank()
       Button('返回').onClick(() => router.back())
     }.width('100%')
+  }
+
+  @Builder MedicinePhoto(name: string, size: number) {
+    Stack() {
+      if (getMedicinePhotoUri(name) !== '') {
+        Image(getMedicinePhotoUri(name)).width(size).height(size).borderRadius(16).objectFit(ImageFit.Cover)
+      } else {
+        Column({ space: 3 }) {
+          Text(getMedicinePhotoLabel(name)).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#102A27').maxLines(1)
+          Text(isMedicinePhotoUploaded(name) ? '药图' : '待传').fontSize(9).fontColor('#0B7A5B')
+        }
+        .width(size)
+        .height(size)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      }
+    }
+    .width(size)
+    .height(size)
+    .borderRadius(16)
+    .backgroundColor(getMedicinePhotoColor(name))
+    .border({ width: 2, color: '#FFFFFF' })
   }
 }

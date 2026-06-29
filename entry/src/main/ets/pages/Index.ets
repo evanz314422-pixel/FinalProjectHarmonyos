@@ -1,17 +1,25 @@
 import { router, promptAction } from '@kit.ArkUI';
 import {
+  careTodos,
+  CareTodo,
   currentSession,
   deviceStatus,
   getCurrentUser,
+  getMedicinePhotoColor,
+  getMedicinePhotoLabel,
+  getMedicinePhotoUri,
   HealthMetric,
   healthAlerts,
   healthMetrics,
   historyRecords,
+  isMedicinePhotoUploaded,
   markFirstPendingRecordDone,
   medicines,
   MedicationPlan,
   MedicationRecord,
   Medicine,
+  notificationPreferences,
+  NotificationPreference,
   plans,
   todayRecords
 } from '../models/AppData';
@@ -21,6 +29,7 @@ import {
 struct Index {
   @State currentTab: number = 0;
   @State refreshToken: number = 0;
+  @State guardianRecordFilter: string = '全部';
 
   private completionText(): string {
     let done: number = 0;
@@ -149,6 +158,105 @@ struct Index {
     promptAction.showToast({ message: '已记录服药，家属端会同步看到状态' });
   }
 
+  private pendingDoseCount(): number {
+    let count: number = 0;
+    for (let index = 0; index < todayRecords.length; index++) {
+      if (todayRecords[index].status !== '已服用') {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  private missedRecordCount(): number {
+    let count: number = 0;
+    for (let index = 0; index < historyRecords.length; index++) {
+      if (historyRecords[index].status === '漏服') {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  private delayedRecordCount(): number {
+    let count: number = 0;
+    for (let index = 0; index < historyRecords.length; index++) {
+      if (historyRecords[index].status === '延迟服用') {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  private careStatusText(): string {
+    if (healthAlerts.length > 0 || this.pendingDoseCount() > 0 || this.lowStockCount() > 0) {
+      return '需关注';
+    }
+    return '平稳';
+  }
+
+  private careStatusColor(): string {
+    return this.careStatusText() === '需关注' ? '#B42318' : '#0B7A5B';
+  }
+
+  private latestSyncText(): string {
+    if (deviceStatus.connected) {
+      return deviceStatus.lastSync;
+    }
+    return '今天 09:18';
+  }
+
+  private firstLowStockMedicineName(): string {
+    for (let index = 0; index < medicines.length; index++) {
+      if (medicines[index].stock <= medicines[index].threshold) {
+        return medicines[index].name;
+      }
+    }
+    return '暂无';
+  }
+
+  private estimatedDays(item: Medicine): number {
+    if (item.stock <= 0) {
+      return 0;
+    }
+    return item.stock;
+  }
+
+  private planTimesForMedicine(name: string): string {
+    for (let index = 0; index < plans.length; index++) {
+      if (plans[index].medicineName === name) {
+        return plans[index].times.join(' / ');
+      }
+    }
+    return '未设置计划';
+  }
+
+  private planStatusForMedicine(name: string): string {
+    for (let index = 0; index < plans.length; index++) {
+      if (plans[index].medicineName === name) {
+        return plans[index].enabled ? '计划启用' : '计划暂停';
+      }
+    }
+    return '无计划';
+  }
+
+  private healthRangeText(type: string): string {
+    if (type === 'heartRate') {
+      return '参考范围 50-110 次/分';
+    }
+    if (type === 'bloodPressure') {
+      return '建议结合医生目标范围';
+    }
+    return '空腹血糖需结合医嘱';
+  }
+
+  private shouldShowRecord(item: MedicationRecord): boolean {
+    if (this.guardianRecordFilter === '全部') {
+      return true;
+    }
+    return item.status === this.guardianRecordFilter;
+  }
+
   build() {
     if (currentSession.role === 'guardian') {
       this.GuardianTabs()
@@ -220,7 +328,7 @@ struct Index {
     .height('100%')
     .barMode(BarMode.Fixed)
     .animationDuration(180)
-    .backgroundColor('#F5F7FA')
+    .backgroundColor('#EEF3F7')
     .onChange((index: number) => {
       this.currentTab = index;
     })
@@ -371,43 +479,22 @@ struct Index {
 
   @Builder GuardianWatchTab() {
     Scroll() {
-      Column({ space: 16 }) {
-        this.HeaderBlock('照护看板', '李女士正在看护张阿姨')
-        this.AlertCard()
-        Row({ space: 12 }) {
-          this.SummaryCard('今日服药', this.completionText(), '#0B7A5B')
-          this.SummaryCard('心率', this.latestHeartRateText(), this.latestHeartRateNormal() ? '#0B7A5B' : '#B42318')
-          this.SummaryCard('低库存', this.lowStockText(), '#C56A16')
-        }
-        .width('100%')
-        Column({ space: 10 }) {
-          Text('AI 照护摘要')
-            .fontSize(22)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#14213D')
-          Text('中午 12:30 的二甲双胍片尚未确认；心率最近一次为 116 次/分，已模拟通知监护人。建议稍后电话确认老人状态。')
-            .fontSize(16)
-            .lineHeight(24)
-            .fontColor('#52635F')
-          Button('生成提醒话术')
-            .width('100%')
-            .height(48)
-            .borderRadius(18)
-            .backgroundColor('#0B7A5B')
-            .onClick(() => router.pushUrl({ url: 'pages/AIAssistantPage' }))
-        }
-        .width('100%')
-        .padding(18)
-        .borderRadius(24)
-        .backgroundColor('#FFFFFF')
-        .alignItems(HorizontalAlign.Start)
+      Column({ space: 14 }) {
+        this.GuardianDashboardHeader()
+        this.GuardianCommandCard()
+        this.GuardianStatsPanel()
+        this.SectionTitle('优先待办')
+        ForEach(careTodos, (item: CareTodo) => {
+          this.PriorityTodoRow(item)
+        }, (item: CareTodo) => item.title + item.level)
 
-        this.SectionTitle('今日药单')
+        this.GuardianInsightPanel()
+        this.SectionTitle('今日服药时间线')
         ForEach(todayRecords, (item: MedicationRecord) => {
-          this.TaskRow(item)
+          this.GuardianDoseTimelineRow(item)
         }, (item: MedicationRecord) => item.time + item.medicineName + item.status + this.refreshToken.toString())
       }
-      .padding({ left: 18, right: 18, top: 18, bottom: 24 })
+      .padding({ left: 16, right: 16, top: 16, bottom: 24 })
     }
     .width('100%')
     .height('100%')
@@ -416,7 +503,8 @@ struct Index {
   @Builder GuardianMedicineTab() {
     Scroll() {
       Column({ space: 16 }) {
-        this.HeaderBlock('代管药品', '监护人可以替老人录入药品和维护计划')
+        this.HeaderBlock('代管中心', '看清库存、阈值、服药时间和需要处理的药品。')
+        this.InventoryRiskCard()
         Row({ space: 12 }) {
           this.ActionButton('替老人加药', 'pages/AddMedicinePage')
           this.ActionButton('新增计划', 'pages/AddPlanPage')
@@ -428,9 +516,16 @@ struct Index {
         }
         .width('100%')
 
-        this.SectionTitle('张阿姨的药品')
+        this.SectionTitle('待处理药品')
         ForEach(medicines, (item: Medicine) => {
-          this.MedicineRow(item)
+          if (item.stock <= item.threshold) {
+            this.GuardianMedicineRow(item)
+          }
+        }, (item: Medicine) => 'risk' + item.id.toString() + item.stock.toString())
+
+        this.SectionTitle('全部药品')
+        ForEach(medicines, (item: Medicine) => {
+          this.GuardianMedicineRow(item)
         }, (item: Medicine) => item.id.toString() + item.stock.toString())
       }
       .padding({ left: 18, right: 18, top: 18, bottom: 24 })
@@ -442,12 +537,17 @@ struct Index {
   @Builder GuardianHealthTab() {
     Scroll() {
       Column({ space: 16 }) {
-        this.HeaderBlock('健康监护', '关注手环同步和生命体征异常')
-        this.DeviceCard()
-        this.AlertCard()
-        this.SectionTitle('健康指标')
+        this.HeaderBlock('健康趋势', '追踪手环同步、异常来源和复测建议。')
+        this.GuardianDeviceCard()
+        this.GuardianAlertTraceCard()
+        Row({ space: 10 }) {
+          this.ActionButton('复测提醒', 'pages/HealthMetricPage')
+          this.ActionButton('联系老人', 'pages/FamilyAssistPage')
+        }
+        .width('100%')
+        this.SectionTitle('指标透明数据')
         ForEach(healthMetrics, (item: HealthMetric) => {
-          this.HealthRow(item.name, item.value, item.time, item.normal)
+          this.GuardianHealthRow(item)
         }, (item: HealthMetric) => item.name + item.time + item.value)
       }
       .padding({ left: 18, right: 18, top: 18, bottom: 24 })
@@ -459,15 +559,24 @@ struct Index {
   @Builder GuardianRecordTab() {
     Scroll() {
       Column({ space: 16 }) {
-        this.HeaderBlock('服药记录', '查看已服、漏服和延迟服用情况')
+        this.HeaderBlock('服药记录', '按状态筛选，快速找到漏服和延迟记录。')
         Row({ space: 12 }) {
           this.ActionButton('统计分析', 'pages/StatsPage')
           this.ActionButton('历史记录', 'pages/HistoryPage')
         }
         .width('100%')
+        Row({ space: 8 }) {
+          this.FilterChip('全部')
+          this.FilterChip('已服用')
+          this.FilterChip('漏服')
+          this.FilterChip('延迟服用')
+        }
+        .width('100%')
         this.SectionTitle('最近记录')
         ForEach(historyRecords, (item: MedicationRecord) => {
-          this.RecordRow(item)
+          if (this.shouldShowRecord(item)) {
+            this.RecordRow(item)
+          }
         }, (item: MedicationRecord) => item.time + item.medicineName + item.status)
       }
       .padding({ left: 18, right: 18, top: 18, bottom: 24 })
@@ -479,7 +588,7 @@ struct Index {
   @Builder GuardianSettingTab() {
     Scroll() {
       Column({ space: 16 }) {
-        this.HeaderBlock('绑定与通知', '管理老人账号关联和异常提醒')
+        this.HeaderBlock('绑定与通知', '管理老人账号关联、通知类型和紧急联系人。')
         Column({ space: 10 }) {
           Text('已绑定老人：张阿姨')
             .fontSize(24)
@@ -488,7 +597,7 @@ struct Index {
           Text('关系：女儿    绑定码：AX2026')
             .fontSize(17)
             .fontColor('#52635F')
-          Text('漏服、低库存和心率异常会在监护人端显示应用内告警。')
+          Text('权限：可查看药品、计划、服药记录、健康告警和库存风险。')
             .fontSize(16)
             .lineHeight(24)
             .fontColor('#52635F')
@@ -499,6 +608,12 @@ struct Index {
         .backgroundColor('#FFFFFF')
         .alignItems(HorizontalAlign.Start)
 
+        this.SectionTitle('通知类型')
+        ForEach(notificationPreferences, (item: NotificationPreference) => {
+          this.NotificationPreferenceRow(item)
+        }, (item: NotificationPreference) => item.title)
+
+        this.MessagePreviewCard()
         this.EntryRow('管理绑定与通知', '绑定老人、通知开关和紧急联系人', 'pages/FamilyAssistPage')
         this.EntryRow('我的设置', '监护人通知和本地备份设置', 'pages/SettingsPage')
         Button('退出登录')
@@ -552,14 +667,26 @@ struct Index {
         this.SmallBadge(this.statusLabel(this.nextDoseRecord().status), this.statusColor(this.nextDoseRecord().status), '#FFFFFF')
       }
       .width('100%')
-      Text(this.nextDoseRecord().time)
-        .fontSize(44)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#0B7A5B')
-      Text(this.nextDoseRecord().medicineName)
-        .fontSize(24)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#14213D')
+      Row({ space: 14 }) {
+        this.MedicinePhoto(this.nextDoseRecord().medicineName, 88)
+        Column({ space: 5 }) {
+          Text(this.nextDoseRecord().time)
+            .fontSize(42)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#0B7A5B')
+          Text(this.nextDoseRecord().medicineName)
+            .fontSize(23)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14213D')
+            .maxLines(2)
+          Text(isMedicinePhotoUploaded(this.nextDoseRecord().medicineName) ? '看图片核对药盒后再服用' : '可上传药盒照片，方便以后辨认')
+            .fontSize(14)
+            .fontColor('#667085')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+      }
+      .width('100%')
       Text(this.hasPendingRecord() ? '请按医嘱确认后服用。完成后点“我已吃药”，家属端会同步状态。' : '今天的用药任务都完成了，可以继续查看健康指标。')
         .fontSize(17)
         .lineHeight(26)
@@ -589,6 +716,38 @@ struct Index {
     .borderRadius(24)
     .backgroundColor('#E7F5EF')
     .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder MedicinePhoto(name: string, size: number) {
+    Stack() {
+      if (getMedicinePhotoUri(name) !== '') {
+        Image(getMedicinePhotoUri(name))
+          .width(size)
+          .height(size)
+          .borderRadius(size >= 70 ? 22 : 16)
+          .objectFit(ImageFit.Cover)
+      } else {
+        Column({ space: 3 }) {
+          Text(getMedicinePhotoLabel(name))
+            .fontSize(size >= 80 ? 18 : 14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#102A27')
+            .maxLines(1)
+          Text(isMedicinePhotoUploaded(name) ? '药图' : '待传')
+            .fontSize(size >= 70 ? 11 : 9)
+            .fontColor('#0B7A5B')
+        }
+        .width(size)
+        .height(size)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      }
+    }
+    .width(size)
+    .height(size)
+    .borderRadius(size >= 70 ? 22 : 16)
+    .backgroundColor(getMedicinePhotoColor(name))
+    .border({ width: 2, color: '#FFFFFF' })
   }
 
   @Builder ProgressCard() {
@@ -679,6 +838,605 @@ struct Index {
     .borderRadius(22)
     .backgroundColor('#FFFFFF')
     .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder CareStatusCard() {
+    Column({ space: 12 }) {
+      Row() {
+        Column({ space: 5 }) {
+          Text('今日看护状态')
+            .fontSize(18)
+            .fontColor('#52635F')
+          Text(this.careStatusText())
+            .fontSize(34)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.careStatusColor())
+        }
+        .alignItems(HorizontalAlign.Start)
+        Blank()
+        this.SmallBadge(healthAlerts.length > 0 ? '有异常' : '无异常', healthAlerts.length > 0 ? '#B42318' : '#0B7A5B', healthAlerts.length > 0 ? '#FFF1F0' : '#E7F5EF')
+      }
+      .width('100%')
+      Text('依据：今日 ' + this.completionText() + ' 次服药已确认，' + this.pendingDoseCount().toString() + ' 次待确认；最近心率 ' + this.latestHeartRateText() + '；低库存 ' + this.lowStockText() + '。')
+        .fontSize(15)
+        .lineHeight(23)
+        .fontColor('#52635F')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder GuardianDashboardHeader() {
+    Column({ space: 8 }) {
+      Row() {
+        Column({ space: 5 }) {
+          Text('张阿姨看护')
+            .fontSize(30)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#102A27')
+          Text('今天 ' + this.completionText() + ' 次服药已确认，' + this.pendingDoseCount().toString() + ' 项需要跟进')
+            .fontSize(15)
+            .lineHeight(22)
+            .fontColor('#52635F')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        this.SmallBadge('家属端', '#155EEF', '#EAF2FF')
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder GuardianCommandCard() {
+    Column({ space: 14 }) {
+      Row() {
+        Column({ space: 5 }) {
+          Text(this.careStatusText())
+            .fontSize(36)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.careStatusColor())
+          Text('当前看护状态')
+            .fontSize(15)
+            .fontColor('#667085')
+        }
+        .alignItems(HorizontalAlign.Start)
+        Blank()
+        Column({ space: 4 }) {
+          Text('风险依据')
+            .fontSize(14)
+            .fontColor('#667085')
+          Text('心率 / 用药 / 库存')
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14213D')
+        }
+        .alignItems(HorizontalAlign.End)
+      }
+      .width('100%')
+      Text('12:30 二甲双胍片仍待确认；今天 09:18 手环同步心率 ' + this.latestHeartRateText() + '；' + this.firstLowStockMedicineName() + '低于库存阈值。')
+        .fontSize(16)
+        .lineHeight(24)
+        .fontColor('#344054')
+      Row({ space: 10 }) {
+        Button('生成提醒话术')
+          .layoutWeight(1)
+          .height(48)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .borderRadius(16)
+          .backgroundColor('#0B7A5B')
+          .onClick(() => router.pushUrl({ url: 'pages/AIAssistantPage' }))
+        Button('查看健康')
+          .layoutWeight(1)
+          .height(48)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .borderRadius(16)
+          .fontColor('#155EEF')
+          .backgroundColor('#EAF2FF')
+          .onClick(() => router.pushUrl({ url: 'pages/HealthMetricPage' }))
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(24)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder GuardianStatsPanel() {
+    Column({ space: 10 }) {
+      Row({ space: 10 }) {
+        this.CompactMetricCard('完成率', this.adherencePercent().toString() + '%', '2/4 已确认', '#0B7A5B', '#E7F5EF')
+        this.CompactMetricCard('待确认', this.pendingDoseCount().toString() + '次', '午间和晚间', '#D97706', '#FFF7E8')
+        this.CompactMetricCard('异常', healthAlerts.length.toString() + '条', this.latestHeartRateText(), '#B42318', '#FFF1F0')
+      }
+      .width('100%')
+      Row({ space: 10 }) {
+        this.CompactMetricCard('低库存', this.lowStockText(), this.firstLowStockMedicineName(), '#C56A16', '#FFF7E8')
+        this.CompactMetricCard('漏服风险', '中等', '午间较高', '#D97706', '#FFF7E8')
+        this.CompactMetricCard('同步', this.latestSyncText(), '手环 S1', '#155EEF', '#EAF2FF')
+      }
+      .width('100%')
+    }
+    .width('100%')
+  }
+
+  @Builder CompactMetricCard(title: string, value: string, desc: string, color: string, bgColor: string) {
+    Column({ space: 5 }) {
+      Text(value)
+        .fontSize(22)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(color)
+        .maxLines(1)
+      Text(title)
+        .fontSize(14)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14213D')
+        .maxLines(1)
+      Text(desc)
+        .fontSize(12)
+        .fontColor('#667085')
+        .maxLines(1)
+    }
+    .layoutWeight(1)
+    .height(94)
+    .padding(10)
+    .borderRadius(18)
+    .backgroundColor(bgColor)
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder GuardianMetricCard(title: string, value: string, desc: string, color: string) {
+    Column({ space: 5 }) {
+      Text(value)
+        .fontSize(24)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(color)
+        .maxLines(1)
+      Text(title)
+        .fontSize(14)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14213D')
+        .maxLines(1)
+      Text(desc)
+        .fontSize(12)
+        .fontColor('#667085')
+        .maxLines(1)
+    }
+    .height(106)
+    .padding(12)
+    .borderRadius(18)
+    .backgroundColor('#FFFFFF')
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder TodoRow(item: CareTodo) {
+    Row() {
+      Column({ space: 5 }) {
+        Row({ space: 8 }) {
+          Text(item.title)
+            .fontSize(19)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14213D')
+          this.SmallBadge(item.level, item.level === '高优先级' ? '#B42318' : '#D97706', item.level === '高优先级' ? '#FFF1F0' : '#FFF7E8')
+        }
+        Text(item.desc)
+          .fontSize(15)
+          .lineHeight(22)
+          .fontColor('#52635F')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      Text(item.action)
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#0B7A5B')
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(20)
+    .backgroundColor('#FFFFFF')
+    .onClick(() => router.pushUrl({ url: item.url }))
+  }
+
+  @Builder PriorityTodoRow(item: CareTodo) {
+    Row({ space: 12 }) {
+      Text('')
+        .width(5)
+        .height(58)
+        .borderRadius(3)
+        .backgroundColor(item.level === '高优先级' ? '#B42318' : item.level === '需关注' ? '#D97706' : '#155EEF')
+      Column({ space: 5 }) {
+        Row({ space: 8 }) {
+          Text(item.title)
+            .fontSize(19)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14213D')
+          this.SmallBadge(item.level, item.level === '高优先级' ? '#B42318' : '#D97706', item.level === '高优先级' ? '#FFF1F0' : '#FFF7E8')
+        }
+        Text(item.desc)
+          .fontSize(15)
+          .lineHeight(22)
+          .fontColor('#52635F')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      Text(item.action)
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#0B7A5B')
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(18)
+    .backgroundColor('#FFFFFF')
+    .onClick(() => router.pushUrl({ url: item.url }))
+  }
+
+  @Builder GuardianAiInsightCard() {
+    Column({ space: 12 }) {
+      Text('AI 风险摘要')
+        .fontSize(22)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14213D')
+      Text('结论：当前为中等看护风险，优先确认午间服药并复测心率。')
+        .fontSize(17)
+        .lineHeight(25)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#B54708')
+      Text('数据依据：12:30 二甲双胍片仍为待服用；今天 09:18 手环同步心率 116 次/分；硝苯地平控释片库存 6 片，低于阈值 8。')
+        .fontSize(15)
+        .lineHeight(23)
+        .fontColor('#52635F')
+      Row({ space: 10 }) {
+        Button('生成提醒话术')
+          .layoutWeight(1)
+          .height(46)
+          .borderRadius(16)
+          .backgroundColor('#0B7A5B')
+          .onClick(() => router.pushUrl({ url: 'pages/AIAssistantPage' }))
+        Button('查看记录')
+          .layoutWeight(1)
+          .height(46)
+          .borderRadius(16)
+          .fontColor('#155EEF')
+          .backgroundColor('#EAF2FF')
+          .onClick(() => router.pushUrl({ url: 'pages/HistoryPage' }))
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder GuardianInsightPanel() {
+    Column({ space: 12 }) {
+      Row() {
+        Text('AI 风险研判')
+          .fontSize(22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14213D')
+        Blank()
+        this.SmallBadge('中等风险', '#B54708', '#FFF7E8')
+      }
+      .width('100%')
+      Text('优先处理：确认午间服药，并在休息后复测心率。')
+        .fontSize(17)
+        .lineHeight(25)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#B54708')
+      Column({ space: 8 }) {
+        this.EvidenceRow('用药依据', '12:30 二甲双胍片仍为待服用')
+        this.EvidenceRow('健康依据', '今天 09:18 心率 116 次/分')
+        this.EvidenceRow('库存依据', '硝苯地平控释片库存 6，低于阈值 8')
+      }
+      .width('100%')
+      Row({ space: 10 }) {
+        Button('生成话术')
+          .layoutWeight(1)
+          .height(46)
+          .fontSize(17)
+          .borderRadius(16)
+          .backgroundColor('#0B7A5B')
+          .onClick(() => router.pushUrl({ url: 'pages/AIAssistantPage' }))
+        Button('查看记录')
+          .layoutWeight(1)
+          .height(46)
+          .fontSize(17)
+          .borderRadius(16)
+          .fontColor('#155EEF')
+          .backgroundColor('#EAF2FF')
+          .onClick(() => router.pushUrl({ url: 'pages/HistoryPage' }))
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(24)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder EvidenceRow(label: string, value: string) {
+    Row() {
+      Text(label)
+        .fontSize(14)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#155EEF')
+        .width(76)
+      Text(value)
+        .fontSize(15)
+        .fontColor('#52635F')
+        .layoutWeight(1)
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 9, bottom: 9 })
+    .borderRadius(14)
+    .backgroundColor('#F6F8FB')
+  }
+
+  @Builder GuardianDoseTimelineRow(item: MedicationRecord) {
+    Row({ space: 12 }) {
+      this.MedicinePhoto(item.medicineName, 50)
+      Column({ space: 2 }) {
+        Text(item.time)
+          .fontSize(21)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14213D')
+        Text(item.status === '已服用' ? '已同步' : '待确认')
+          .fontSize(12)
+          .fontColor('#667085')
+      }
+      .width(72)
+      .alignItems(HorizontalAlign.Start)
+      Column({ space: 5 }) {
+        Text(item.medicineName)
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14213D')
+        Text(item.status === '已服用' ? '老人端已确认，家属无需处理。' : '建议电话确认是否已经服用。')
+          .fontSize(14)
+          .lineHeight(21)
+          .fontColor('#52635F')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      this.SmallBadge(this.statusLabel(item.status), this.statusColor(item.status), item.status === '已服用' ? '#E7F5EF' : '#FFF7E8')
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(18)
+    .backgroundColor('#FFFFFF')
+  }
+
+  @Builder InventoryRiskCard() {
+    Column({ space: 12 }) {
+      Row() {
+        Text('库存风险概览')
+          .fontSize(21)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14213D')
+        Blank()
+        this.SmallBadge(this.lowStockText(), this.lowStockCount() > 0 ? '#B54708' : '#0B7A5B', this.lowStockCount() > 0 ? '#FFF7E8' : '#E7F5EF')
+      }
+      .width('100%')
+      Text(this.lowStockCount() > 0 ? this.firstLowStockMedicineName() + '低于库存阈值，预计还能使用约 6 天。建议尽快补药或确认是否还有备用药。' : '当前常用药库存充足。')
+        .fontSize(16)
+        .lineHeight(24)
+        .fontColor('#52635F')
+      Progress({ value: this.lowStockCount() > 0 ? 70 : 20, total: 100, type: ProgressType.Linear })
+        .width('100%')
+        .color(this.lowStockCount() > 0 ? '#D97706' : '#0B7A5B')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
+    .backgroundColor(this.lowStockCount() > 0 ? '#FFF7E8' : '#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder GuardianMedicineRow(item: Medicine) {
+    Column({ space: 10 }) {
+      Row({ space: 12 }) {
+        this.MedicinePhoto(item.name, 58)
+        Column({ space: 5 }) {
+          Text(item.name)
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14213D')
+            .maxLines(1)
+          Text(item.spec + '  默认 ' + item.dosage + '  ' + this.planTimesForMedicine(item.name))
+            .fontSize(15)
+            .lineHeight(21)
+            .fontColor('#52635F')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        this.SmallBadge(item.stock <= item.threshold ? '需补药' : '库存正常', item.stock <= item.threshold ? '#B54708' : '#0B7A5B', item.stock <= item.threshold ? '#FFF7E8' : '#E7F5EF')
+      }
+      .width('100%')
+      Row({ space: 8 }) {
+        this.DataPill('库存 ' + item.stock.toString())
+        this.DataPill('阈值 ' + item.threshold.toString())
+        this.DataPill('约 ' + this.estimatedDays(item).toString() + ' 天')
+      }
+      .width('100%')
+      Text(this.planStatusForMedicine(item.name) + '；' + item.note)
+        .fontSize(14)
+        .lineHeight(21)
+        .fontColor('#667085')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+    .onClick(() => router.pushUrl({ url: 'pages/MedicineDetailPage' }))
+  }
+
+  @Builder GuardianDeviceCard() {
+    Column({ space: 10 }) {
+      Row() {
+        Column({ space: 5 }) {
+          Text(deviceStatus.name)
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14213D')
+          Text('最近同步：' + this.latestSyncText())
+            .fontSize(16)
+            .fontColor('#52635F')
+        }
+        .alignItems(HorizontalAlign.Start)
+        Blank()
+        this.SmallBadge(deviceStatus.battery.toString() + '%', '#0B7A5B', '#E7F5EF')
+      }
+      .width('100%')
+      Text(deviceStatus.connected ? '设备在线，健康数据会持续同步。' : '当前为模拟同步数据，最近一条异常来自今天 09:18。')
+        .fontSize(15)
+        .lineHeight(22)
+        .fontColor('#667085')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder GuardianAlertTraceCard() {
+    Column({ space: 10 }) {
+      Text('异常追踪')
+        .fontSize(21)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(healthAlerts.length > 0 ? '#B42318' : '#0B7A5B')
+      Text(healthAlerts.length > 0 ? healthAlerts[0].title + '：' + healthAlerts[0].value + '，来源于' + healthAlerts[0].time + '手环同步。' : '当前没有异常提醒。')
+        .fontSize(16)
+        .lineHeight(24)
+        .fontColor('#52635F')
+      Text(healthAlerts.length > 0 ? '建议动作：联系老人确认状态，休息后复测；如持续不适及时就医。' : '建议动作：保持每日记录。')
+        .fontSize(15)
+        .lineHeight(22)
+        .fontColor(healthAlerts.length > 0 ? '#B42318' : '#667085')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
+    .backgroundColor(healthAlerts.length > 0 ? '#FFF1F0' : '#E7F5EF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder GuardianHealthRow(item: HealthMetric) {
+    Row() {
+      Column({ space: 5 }) {
+        Text(item.name)
+          .fontSize(21)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14213D')
+        Text(item.time + '  ' + this.healthRangeText(item.type))
+          .fontSize(14)
+          .lineHeight(21)
+          .fontColor('#667085')
+      }
+      .alignItems(HorizontalAlign.Start)
+      Blank()
+      Column({ space: 4 }) {
+        Text(item.value)
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(item.normal ? '#0B7A5B' : '#B42318')
+        Text(item.normal ? '正常' : '建议复测')
+          .fontSize(14)
+          .fontColor(item.normal ? '#0B7A5B' : '#B42318')
+      }
+      .alignItems(HorizontalAlign.End)
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
+    .backgroundColor(item.normal ? '#FFFFFF' : '#FFF1F0')
+  }
+
+  @Builder FilterChip(label: string) {
+    Text(label)
+      .fontSize(15)
+      .fontWeight(this.guardianRecordFilter === label ? FontWeight.Bold : FontWeight.Regular)
+      .fontColor(this.guardianRecordFilter === label ? '#0B7A5B' : '#52635F')
+      .textAlign(TextAlign.Center)
+      .layoutWeight(1)
+      .height(42)
+      .borderRadius(16)
+      .backgroundColor(this.guardianRecordFilter === label ? '#E7F5EF' : '#FFFFFF')
+      .onClick(() => {
+        this.guardianRecordFilter = label;
+      })
+  }
+
+  @Builder NotificationPreferenceRow(item: NotificationPreference) {
+    Row() {
+      Column({ space: 4 }) {
+        Text(item.title)
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14213D')
+        Text(item.desc)
+          .fontSize(14)
+          .lineHeight(21)
+          .fontColor('#667085')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      Toggle({ type: ToggleType.Switch, isOn: item.enabled })
+        .onChange((value: boolean) => {
+          item.enabled = value;
+        })
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(20)
+    .backgroundColor('#FFFFFF')
+  }
+
+  @Builder MessagePreviewCard() {
+    Column({ space: 10 }) {
+      Text('通知话术预览')
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14213D')
+      Text('张阿姨今天中午 12:30 的二甲双胍片还没有确认，建议您方便时电话提醒一下，并询问当前身体状态。')
+        .fontSize(16)
+        .lineHeight(24)
+        .fontColor('#52635F')
+        .padding(12)
+        .borderRadius(16)
+        .backgroundColor('#F6FEF9')
+      Text('紧急联系人：女儿 李女士 13800000002')
+        .fontSize(15)
+        .fontColor('#667085')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder DataPill(text: string) {
+    Text(text)
+      .fontSize(13)
+      .fontColor('#52635F')
+      .padding({ left: 9, right: 9, top: 5, bottom: 5 })
+      .borderRadius(12)
+      .backgroundColor('#F2F4F7')
   }
 
   @Builder DeviceCard() {
@@ -808,7 +1566,8 @@ struct Index {
   }
 
   @Builder TaskRow(item: MedicationRecord) {
-    Row() {
+    Row({ space: 12 }) {
+      this.MedicinePhoto(item.medicineName, 58)
       Column({ space: 5 }) {
         Text(item.time)
           .fontSize(22)
@@ -816,10 +1575,11 @@ struct Index {
           .fontColor('#14213D')
         Text(item.medicineName)
           .fontSize(17)
+          .maxLines(1)
           .fontColor('#52635F')
       }
+      .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
-      Blank()
       this.SmallBadge(this.statusLabel(item.status), this.statusColor(item.status), item.status === '已服用' ? '#E7F5EF' : '#FFF7E8')
     }
     .width('100%')
@@ -830,19 +1590,23 @@ struct Index {
 
   @Builder MedicineRow(item: Medicine) {
     Column({ space: 8 }) {
-      Row() {
-        Text(item.name)
-          .fontSize(22)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#14213D')
-          .maxLines(1)
-        Blank()
+      Row({ space: 12 }) {
+        this.MedicinePhoto(item.name, 64)
+        Column({ space: 5 }) {
+          Text(item.name)
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14213D')
+            .maxLines(1)
+          Text(item.spec + '  默认 ' + item.dosage)
+            .fontSize(16)
+            .fontColor('#52635F')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
         this.SmallBadge(item.stock <= item.threshold ? '快吃完' : '充足', item.stock <= item.threshold ? '#B54708' : '#0B7A5B', item.stock <= item.threshold ? '#FFF7E8' : '#E7F5EF')
       }
       .width('100%')
-      Text(item.spec + '  默认 ' + item.dosage)
-        .fontSize(17)
-        .fontColor('#52635F')
       Text('库存 ' + item.stock.toString() + '，' + item.note)
         .fontSize(15)
         .lineHeight(22)
@@ -858,13 +1622,20 @@ struct Index {
 
   @Builder PlanRow(plan: MedicationPlan) {
     Column({ space: 8 }) {
-      Row() {
-        Text(plan.medicineName)
-          .fontSize(22)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#14213D')
-          .maxLines(1)
-        Blank()
+      Row({ space: 12 }) {
+        this.MedicinePhoto(plan.medicineName, 64)
+        Column({ space: 4 }) {
+          Text(plan.medicineName)
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#14213D')
+            .maxLines(1)
+          Text(plan.dosage + '  ' + plan.mealTime)
+            .fontSize(16)
+            .fontColor('#52635F')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
         this.SmallBadge(plan.enabled ? '启用' : '暂停', plan.enabled ? '#0B7A5B' : '#667085', plan.enabled ? '#E7F5EF' : '#F2F4F7')
       }
       .width('100%')
@@ -872,9 +1643,6 @@ struct Index {
         .fontSize(24)
         .fontWeight(FontWeight.Bold)
         .fontColor('#0B7A5B')
-      Text(plan.dosage + '  ' + plan.mealTime)
-        .fontSize(17)
-        .fontColor('#52635F')
     }
     .width('100%')
     .padding(18)

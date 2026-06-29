@@ -1,4 +1,5 @@
 import { router } from '@kit.ArkUI';
+import { getMedicinePhotoColor, getMedicinePhotoLabel, getMedicinePhotoUri, isMedicinePhotoUploaded } from '../models/AppData';
 
 @Entry
 @Component
@@ -8,7 +9,16 @@ struct MedicineDetailPage {
       Column({ space: 16 }) {
         this.Header('药品详情')
         Column({ space: 12 }) {
-          Text('二甲双胍片').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#14213D')
+          Row({ space: 14 }) {
+            this.MedicinePhoto('二甲双胍片', 82)
+            Column({ space: 6 }) {
+              Text('二甲双胍片').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#14213D')
+              Text('老人端会显示此药品图片，方便看图认药。').fontSize(14).fontColor('#667085')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+          }
+          .width('100%')
           Text('规格：0.5g x 30片').fontSize(16)
           Text('常用剂量：每次 1 片，每日 3 次').fontSize(16)
           Divider()
@@ -35,5 +45,27 @@ struct MedicineDetailPage {
       Blank()
       Button('返回').onClick(() => router.back())
     }.width('100%')
+  }
+
+  @Builder MedicinePhoto(name: string, size: number) {
+    Stack() {
+      if (getMedicinePhotoUri(name) !== '') {
+        Image(getMedicinePhotoUri(name)).width(size).height(size).borderRadius(22).objectFit(ImageFit.Cover)
+      } else {
+        Column({ space: 3 }) {
+          Text(getMedicinePhotoLabel(name)).fontSize(18).fontWeight(FontWeight.Bold).fontColor('#102A27').maxLines(1)
+          Text(isMedicinePhotoUploaded(name) ? '药图' : '待传').fontSize(11).fontColor('#0B7A5B')
+        }
+        .width(size)
+        .height(size)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      }
+    }
+    .width(size)
+    .height(size)
+    .borderRadius(22)
+    .backgroundColor(getMedicinePhotoColor(name))
+    .border({ width: 2, color: '#FFFFFF' })
   }
 }
