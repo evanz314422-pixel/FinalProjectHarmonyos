@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "安心服药助手入口模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "用药提醒和健康记录"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "安心服药助手"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "src": [
+    "pages/LoginPage",
+    "pages/Index",
+    "pages/AddMedicinePage",
+    "pages/AIAssistantPage",
+    "pages/MedicineLibraryPage",
+    "pages/MedicineDetailPage",
+    "pages/AddPlanPage",
+    "pages/PlanListPage",
+    "pages/PlanDetailPage",
+    "pages/ReminderDetailPage",
+    "pages/CheckInPage",
+    "pages/HistoryPage",
+    "pages/StatsPage",
+    "pages/InventoryPage",
+    "pages/HealthMetricPage",
+    "pages/FamilyAssistPage",
+    "pages/SettingsPage"
+  ]
+}
