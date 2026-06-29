@@ -32,6 +32,44 @@ struct Index {
     return done.toString() + '/' + todayRecords.length.toString();
   }
 
+  private doneCount(): number {
+    let done: number = 0;
+    for (let index = 0; index < todayRecords.length; index++) {
+      if (todayRecords[index].status === '已服用') {
+        done++;
+      }
+    }
+    return done;
+  }
+
+  private adherencePercent(): number {
+    if (todayRecords.length === 0) {
+      return 0;
+    }
+    return Math.round(this.doneCount() * 100 / todayRecords.length);
+  }
+
+  private hasPendingRecord(): boolean {
+    for (let index = 0; index < todayRecords.length; index++) {
+      if (todayRecords[index].status !== '已服用') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private nextDoseRecord(): MedicationRecord {
+    for (let index = 0; index < todayRecords.length; index++) {
+      if (todayRecords[index].status !== '已服用') {
+        return todayRecords[index];
+      }
+    }
+    if (todayRecords.length > 0) {
+      return todayRecords[0];
+    }
+    return { elderId: 1, time: '--:--', medicineName: '暂无用药任务', status: '已服用' };
+  }
+
   private lowStockText(): string {
     let count: number = 0;
     for (let index = 0; index < medicines.length; index++) {
@@ -64,6 +102,42 @@ struct Index {
     router.replaceUrl({ url: 'pages/LoginPage' });
   }
 
+  private statusLabel(status: string): string {
+    if (status === '已服用') {
+      return '已完成';
+    }
+    if (status === '漏服') {
+      return '需补记';
+    }
+    if (status === '延迟服用') {
+      return '已延迟';
+    }
+    return '待服用';
+  }
+
+  private statusColor(status: string): string {
+    if (status === '已服用') {
+      return '#0B7A5B';
+    }
+    if (status === '漏服') {
+      return '#B42318';
+    }
+    if (status === '延迟服用') {
+      return '#C56A16';
+    }
+    return '#D97706';
+  }
+
+  private completeNextDose(): void {
+    if (!this.hasPendingRecord()) {
+      promptAction.showToast({ message: '今天的用药已经全部完成' });
+      return;
+    }
+    markFirstPendingRecordDone();
+    this.refreshToken++;
+    promptAction.showToast({ message: '已记录服药，家属端会同步看到状态' });
+  }
+
   build() {
     if (currentSession.role === 'guardian') {
       this.GuardianTabs()
@@ -77,12 +151,12 @@ struct Index {
       TabContent() {
         this.ElderTodayTab()
       }
-      .tabBar(this.NavItem('今日', '吃药', 0))
+      .tabBar(this.NavItem('今日', '任务', 0))
 
       TabContent() {
         this.ElderMedicineTab()
       }
-      .tabBar(this.NavItem('药品', '录入', 1))
+      .tabBar(this.NavItem('药品', '库存', 1))
 
       TabContent() {
         this.ElderPlanTab()
@@ -92,12 +166,12 @@ struct Index {
       TabContent() {
         this.ElderHealthTab()
       }
-      .tabBar(this.NavItem('健康', '手环', 3))
+      .tabBar(this.NavItem('健康', '指标', 3))
 
       TabContent() {
         this.ElderMineTab()
       }
-      .tabBar(this.NavItem('我的', '家属', 4))
+      .tabBar(this.NavItem('我的', '设置', 4))
     }
     .width('100%')
     .height('100%')
@@ -149,54 +223,9 @@ struct Index {
   @Builder ElderTodayTab() {
     Scroll() {
       Column({ space: 16 }) {
-        this.HeaderBlock('安心服药助手', '今天按时吃药，身体异常会同步提醒家属')
+        this.HeaderBlock('安心服药助手', '把今天最重要的用药任务放在最前面，少找一步，少漏一次。')
+        this.NextDoseCard()
         this.AlertCard()
-
-        Column({ space: 14 }) {
-          Text('下一次服药')
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#173B33')
-          Text('12:30')
-            .fontSize(42)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#0B7A5B')
-          Text('二甲双胍片  1片  饭后')
-            .fontSize(24)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#14213D')
-          Text('请饭后 15 分钟内服用。确认后家属端会同步看到服药状态。')
-            .fontSize(17)
-            .lineHeight(26)
-            .fontColor('#52635F')
-          Row({ space: 12 }) {
-            Button('我已吃药')
-              .layoutWeight(1)
-              .height(56)
-              .fontSize(20)
-              .borderRadius(20)
-              .backgroundColor('#0B7A5B')
-              .onClick(() => {
-                markFirstPendingRecordDone();
-                this.refreshToken++;
-                promptAction.showToast({ message: '已记录服药，监护人端可查看' });
-              })
-            Button('稍后提醒')
-              .layoutWeight(1)
-              .height(56)
-              .fontSize(20)
-              .borderRadius(20)
-              .fontColor('#0B7A5B')
-              .backgroundColor('#FFFFFF')
-              .onClick(() => router.pushUrl({ url: 'pages/ReminderDetailPage' }))
-          }
-          .width('100%')
-        }
-        .width('100%')
-        .padding(20)
-        .borderRadius(26)
-        .backgroundColor('#E7F5EF')
-        .alignItems(HorizontalAlign.Start)
 
         Row({ space: 12 }) {
           this.SummaryCard('今日完成', this.completionText(), '#0B7A5B')
@@ -205,6 +234,7 @@ struct Index {
         }
         .width('100%')
 
+        this.ProgressCard()
         this.SectionTitle('今日药单')
         ForEach(todayRecords, (item: MedicationRecord) => {
           this.TaskRow(item)
@@ -513,20 +543,106 @@ struct Index {
   }
 
   @Builder AlertCard() {
-    Column({ space: 8 }) {
-      Text(healthAlerts.length > 0 ? healthAlerts[0].title : '暂无异常')
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(healthAlerts.length > 0 ? '#B42318' : '#0B7A5B')
-      Text(healthAlerts.length > 0 ? healthAlerts[0].value + '，已模拟提醒监护人。' : '今日未发现心率、血压或血糖异常。')
+    Column({ space: 10 }) {
+      Row() {
+        Text(healthAlerts.length > 0 ? '需要关注' : '状态平稳')
+          .fontSize(19)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(healthAlerts.length > 0 ? '#B42318' : '#0B7A5B')
+        Blank()
+        Text(healthAlerts.length > 0 ? '已通知' : '正常')
+          .fontSize(14)
+          .fontColor(healthAlerts.length > 0 ? '#B42318' : '#0B7A5B')
+      }
+      .width('100%')
+      Text(healthAlerts.length > 0 ? healthAlerts[0].title + '：' + healthAlerts[0].value + '，建议稍后复测或联系家属。' : '今天暂未发现心率、血压或血糖异常。')
         .fontSize(16)
         .lineHeight(24)
         .fontColor('#52635F')
     }
     .width('100%')
     .padding(18)
-    .borderRadius(24)
+    .borderRadius(22)
     .backgroundColor(healthAlerts.length > 0 ? '#FFF1F0' : '#E7F5EF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder NextDoseCard() {
+    Column({ space: 14 }) {
+      Row() {
+        Text(this.hasPendingRecord() ? '下一次服药' : '今日已完成')
+          .fontSize(19)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#102A27')
+        Blank()
+        this.SmallBadge(this.statusLabel(this.nextDoseRecord().status), this.statusColor(this.nextDoseRecord().status), '#FFFFFF')
+      }
+      .width('100%')
+      Text(this.nextDoseRecord().time)
+        .fontSize(44)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#0B7A5B')
+      Text(this.nextDoseRecord().medicineName)
+        .fontSize(24)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14213D')
+      Text(this.hasPendingRecord() ? '请按医嘱确认后服用。完成后点“我已吃药”，家属端会同步状态。' : '今天的用药任务都完成了，可以继续查看健康指标。')
+        .fontSize(17)
+        .lineHeight(26)
+        .fontColor('#52635F')
+      Row({ space: 10 }) {
+        Button(this.hasPendingRecord() ? '我已吃药' : '查看记录')
+          .layoutWeight(1)
+          .height(56)
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .borderRadius(18)
+          .backgroundColor('#0B7A5B')
+          .onClick(() => this.completeNextDose())
+        Button('稍后提醒')
+          .layoutWeight(1)
+          .height(56)
+          .fontSize(19)
+          .borderRadius(18)
+          .fontColor('#0B7A5B')
+          .backgroundColor('#FFFFFF')
+          .onClick(() => router.pushUrl({ url: 'pages/ReminderDetailPage' }))
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(20)
+    .borderRadius(24)
+    .backgroundColor('#E7F5EF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder ProgressCard() {
+    Column({ space: 12 }) {
+      Row() {
+        Text('今日完成率')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14213D')
+        Blank()
+        Text(this.adherencePercent().toString() + '%')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#0B7A5B')
+      }
+      .width('100%')
+      Progress({ value: this.adherencePercent(), total: 100, type: ProgressType.Linear })
+        .width('100%')
+        .color('#0B7A5B')
+      Text(this.hasPendingRecord() ? '还有未确认的服药任务，建议完成后再查看晚间计划。' : '今天计划已经完成，继续保持。')
+        .fontSize(15)
+        .lineHeight(22)
+        .fontColor('#667085')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
+    .backgroundColor('#FFFFFF')
     .alignItems(HorizontalAlign.Start)
   }
 
@@ -592,7 +708,7 @@ struct Index {
     }
     .width(66)
     .height(52)
-    .borderRadius(20)
+    .borderRadius(18)
     .backgroundColor(this.currentTab === index ? '#E7F5EF' : '#FFFFFF')
     .justifyContent(FlexAlign.Center)
   }
@@ -643,22 +759,17 @@ struct Index {
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
           .fontColor('#14213D')
-        Text(item.medicineName + '  ' + item.status)
+        Text(item.medicineName)
           .fontSize(17)
           .fontColor('#52635F')
       }
       .alignItems(HorizontalAlign.Start)
       Blank()
-      Text(item.status === '已服用' ? '完成' : '待吃')
-        .fontSize(16)
-        .fontColor('#FFFFFF')
-        .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-        .borderRadius(16)
-        .backgroundColor(item.status === '已服用' ? '#0B7A5B' : '#D97706')
+      this.SmallBadge(this.statusLabel(item.status), this.statusColor(item.status), item.status === '已服用' ? '#E7F5EF' : '#FFF7E8')
     }
     .width('100%')
     .padding(18)
-    .borderRadius(22)
+    .borderRadius(20)
     .backgroundColor('#FFFFFF')
   }
 
@@ -669,10 +780,9 @@ struct Index {
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
           .fontColor('#14213D')
+          .maxLines(1)
         Blank()
-        Text(item.stock <= item.threshold ? '快吃完' : '充足')
-          .fontSize(15)
-          .fontColor(item.stock <= item.threshold ? '#B54708' : '#0B7A5B')
+        this.SmallBadge(item.stock <= item.threshold ? '快吃完' : '充足', item.stock <= item.threshold ? '#B54708' : '#0B7A5B', item.stock <= item.threshold ? '#FFF7E8' : '#E7F5EF')
       }
       .width('100%')
       Text(item.spec + '  默认 ' + item.dosage)
@@ -698,10 +808,9 @@ struct Index {
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
           .fontColor('#14213D')
+          .maxLines(1)
         Blank()
-        Text(plan.enabled ? '启用' : '暂停')
-          .fontSize(15)
-          .fontColor(plan.enabled ? '#0B7A5B' : '#8A9A96')
+        this.SmallBadge(plan.enabled ? '启用' : '暂停', plan.enabled ? '#0B7A5B' : '#667085', plan.enabled ? '#E7F5EF' : '#F2F4F7')
       }
       .width('100%')
       Text(plan.times.join(' / '))
@@ -733,9 +842,7 @@ struct Index {
       }
       .alignItems(HorizontalAlign.Start)
       Blank()
-      Text(item.status)
-        .fontSize(16)
-        .fontColor(item.status === '漏服' ? '#B42318' : '#0B7A5B')
+      this.SmallBadge(this.statusLabel(item.status), this.statusColor(item.status), item.status === '漏服' ? '#FFF1F0' : '#E7F5EF')
     }
     .width('100%')
     .padding(18)
@@ -795,5 +902,15 @@ struct Index {
     .borderRadius(22)
     .backgroundColor('#FFFFFF')
     .onClick(() => router.pushUrl({ url: url }))
+  }
+
+  @Builder SmallBadge(text: string, color: string, bgColor: string) {
+    Text(text)
+      .fontSize(14)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(color)
+      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      .borderRadius(14)
+      .backgroundColor(bgColor)
   }
 }

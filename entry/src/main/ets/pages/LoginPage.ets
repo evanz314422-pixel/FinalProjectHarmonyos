@@ -59,16 +59,21 @@ struct LoginPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#FAF7F1')
+    .backgroundColor('#F4F8FB')
   }
 
   @Builder BrandHeader() {
-    Column({ space: 8 }) {
+    Column({ space: 12 }) {
+      Row({ space: 8 }) {
+        this.UsagePill('用药提醒', '#0B7A5B', '#E7F5EF')
+        this.UsagePill('家属看护', '#155EEF', '#EAF2FF')
+      }
+      .width('100%')
       Text('安心服药助手')
         .fontSize(34)
         .fontWeight(FontWeight.Bold)
         .fontColor('#102A27')
-      Text(this.authStep === 'chooseRole' ? '先选择使用身份，后面只显示需要的操作。' : this.selectedRole === 'elder' ? '老人端：提醒吃药，也能自己添加药品。' : '家属端：帮家人管理药品和健康异常。')
+      Text(this.authStep === 'chooseRole' ? '先选择身份，系统只展示当前角色最常用的操作。老人少点几步，家属先看风险。' : this.selectedRole === 'elder' ? '老人端：提醒吃药、快速确认、记录健康指标。' : '家属端：查看服药记录、低库存和健康异常。')
         .fontSize(18)
         .lineHeight(26)
         .fontColor('#52635F')
@@ -79,16 +84,28 @@ struct LoginPage {
 
   @Builder ChooseRolePanel() {
     Column({ space: 14 }) {
-      this.RoleCard('我是老人', '我自己用，提醒我按时吃药，也可以自己添加药品。', '进入老人登录', 'elder', true)
-      this.RoleCard('我是家属', '我照顾家人，查看服药记录和健康异常。', '进入家属登录', 'guardian', false)
-      Button('直接体验老人端')
-        .width('100%')
-        .height(44)
-        .fontSize(17)
-        .borderRadius(18)
-        .fontColor('#0B7A5B')
-        .backgroundColor('#FAF7F1')
-        .onClick(() => this.enterApp('elder'))
+      this.RoleCard('我是老人', '看下一次吃什么、什么时候吃，一键确认已服用。', '进入老人端', 'elder', true)
+      this.RoleCard('我是家属', '帮家人看服药进度、低库存和健康异常。', '进入家属端', 'guardian', false)
+      Row({ space: 10 }) {
+        Button('体验老人端')
+          .layoutWeight(1)
+          .height(46)
+          .fontSize(16)
+          .borderRadius(16)
+          .fontColor('#0B7A5B')
+          .backgroundColor('#E7F5EF')
+          .onClick(() => this.enterApp('elder'))
+        Button('体验家属端')
+          .layoutWeight(1)
+          .height(46)
+          .fontSize(16)
+          .borderRadius(16)
+          .fontColor('#155EEF')
+          .backgroundColor('#EAF2FF')
+          .onClick(() => this.enterApp('guardian'))
+      }
+      .width('100%')
+      this.TrustCard()
     }
     .width('100%')
   }
@@ -201,6 +218,7 @@ struct LoginPage {
 
   @Builder RoleCard(title: string, desc: string, action: string, role: UserRole, primary: boolean) {
     Column({ space: 12 }) {
+      this.UsagePill(primary ? '本人使用' : '协助照护', primary ? '#0B7A5B' : '#155EEF', primary ? '#E7F5EF' : '#EAF2FF')
       Text(title)
         .fontSize(26)
         .fontWeight(FontWeight.Bold)
@@ -214,16 +232,44 @@ struct LoginPage {
         .height(58)
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
-        .borderRadius(22)
-        .fontColor(primary ? '#FFFFFF' : '#0B7A5B')
-        .backgroundColor(primary ? '#0B7A5B' : '#E7F5EF')
+        .borderRadius(18)
+        .fontColor(primary ? '#FFFFFF' : '#155EEF')
+        .backgroundColor(primary ? '#0B7A5B' : '#EAF2FF')
         .onClick(() => this.chooseRole(role))
     }
     .width('100%')
     .padding(20)
-    .borderRadius(26)
+    .borderRadius(22)
     .backgroundColor('#FFFFFF')
     .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder TrustCard() {
+    Column({ space: 8 }) {
+      Text('使用提示')
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14213D')
+      Text('演示版不会发送真实短信或调用真实蓝牙；用药剂量仍应以医生处方为准。')
+        .fontSize(15)
+        .lineHeight(22)
+        .fontColor('#667085')
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(18)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder UsagePill(text: string, color: string, bgColor: string) {
+    Text(text)
+      .fontSize(14)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(color)
+      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      .borderRadius(14)
+      .backgroundColor(bgColor)
   }
 
   @Builder CodeField() {
