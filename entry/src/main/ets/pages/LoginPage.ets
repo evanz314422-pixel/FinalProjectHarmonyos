@@ -1,21 +1,74 @@
 import { router, promptAction } from '@kit.ArkUI';
-import { UserRole, setSession } from '../models/AppData';
+import { FamilyBinding, familyBindings, selectElder, UserRole, setSession } from '../models/AppData';
 
-type AuthStep = 'chooseRole' | 'login' | 'register' | 'bindElder';
+type AuthStep = 'login' | 'chooseRole' | 'bindElder';
 
 @Entry
 @Component
 struct LoginPage {
-  @State authStep: AuthStep = 'chooseRole';
+  @State authStep: AuthStep = 'login';
   @State selectedRole: UserRole = 'elder';
   @State phone: string = '';
   @State code: string = '';
-  @State userName: string = '';
-  @State bindCode: string = 'AX2026';
+  @State bindCode: string = '';
+
+  private isValidPhone(): boolean {
+    if (this.phone.length !== 11) {
+      return false;
+    }
+    if (!this.phone.startsWith('1')) {
+      return false;
+    }
+    for (let index = 0; index < this.phone.length; index++) {
+      const code: number = this.phone.charCodeAt(index);
+      if (code < 48 || code > 57) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private isValidCode(): boolean {
+    if (this.code.length !== 6) {
+      return false;
+    }
+    for (let index = 0; index < this.code.length; index++) {
+      const code: number = this.code.charCodeAt(index);
+      if (code < 48 || code > 57) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private requestCode(): void {
+    if (!this.isValidPhone()) {
+      promptAction.showToast({ message: '请输入正确的11位手机号' });
+      return;
+    }
+    promptAction.showToast({ message: '验证码已发送' });
+  }
+
+  private continueAfterLogin(): void {
+    if (!this.isValidPhone()) {
+      promptAction.showToast({ message: '请输入正确的11位手机号' });
+      return;
+    }
+    if (!this.isValidCode()) {
+      promptAction.showToast({ message: '请输入6位数字验证码' });
+      return;
+    }
+    this.authStep = 'chooseRole';
+    promptAction.showToast({ message: '请确认使用身份' });
+  }
 
   private chooseRole(role: UserRole): void {
     this.selectedRole = role;
-    this.authStep = 'login';
+    if (role === 'elder') {
+      this.enterApp('elder');
+    } else {
+      this.authStep = 'bindElder';
+    }
   }
 
   private enterApp(role: UserRole): void {
@@ -24,38 +77,32 @@ struct LoginPage {
     router.replaceUrl({ url: 'pages/Index' });
   }
 
-  private submitRegister(): void {
-    if (this.selectedRole === 'guardian') {
-      this.authStep = 'bindElder';
-      promptAction.showToast({ message: '家属账号已创建，请绑定老人（模拟）' });
-    } else {
-      promptAction.showToast({ message: '老人账号已创建（模拟）' });
-      this.enterApp('elder');
-    }
-  }
-
   private submitBind(): void {
-    if (this.bindCode === 'AX2026') {
-      promptAction.showToast({ message: '已绑定张阿姨（模拟）' });
-      this.enterApp('guardian');
-    } else {
-      promptAction.showToast({ message: '绑定码不正确，请输入 AX2026' });
+    for (let index = 0; index < familyBindings.length; index++) {
+      const item: FamilyBinding = familyBindings[index];
+      if (this.bindCode === item.code) {
+        selectElder(item.elderId);
+        promptAction.showToast({ message: '绑定成功' });
+        this.enterApp('guardian');
+        return;
+      }
     }
+    promptAction.showToast({ message: '绑定码不正确，请核对后重试' });
   }
 
   build() {
     Scroll() {
       Column({ space: 20 }) {
         this.BrandHeader()
-        if (this.authStep === 'chooseRole') {
-          this.ChooseRolePanel()
-        } else if (this.authStep === 'bindElder') {
-          this.BindPanel()
+        if (this.authStep === 'login') {
+          this.LoginPanel()
+        } else if (this.authStep === 'chooseRole') {
+          this.RolePanel()
         } else {
-          this.AuthPanel()
+          this.BindPanel()
         }
       }
-      .padding({ left: 22, right: 22, top: 34, bottom: 24 })
+      .padding({ left: 22, right: 22, top: 48, bottom: 24 })
     }
     .width('100%')
     .height('100%')
@@ -73,44 +120,44 @@ struct LoginPage {
         .fontSize(34)
         .fontWeight(FontWeight.Bold)
         .fontColor('#102A27')
-      Text(this.authStep === 'chooseRole' ? '先选择身份，系统只展示当前角色最常用的操作。老人少点几步，家属先看风险。' : this.selectedRole === 'elder' ? '老人端：提醒吃药、快速确认、记录健康指标。' : '家属端：查看服药记录、低库存和健康异常。')
-        .fontSize(18)
-        .lineHeight(26)
+      Text('老人按时服药，家属及时看护')
+        .fontSize(19)
+        .lineHeight(27)
         .fontColor('#52635F')
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
   }
 
-  @Builder ChooseRolePanel() {
-    Column({ space: 14 }) {
-      this.RoleCard('我是老人', '看下一次吃什么、什么时候吃，一键确认已服用。', '进入老人端', 'elder', true)
-      this.RoleCard('我是家属', '帮家人看服药进度、低库存和健康异常。', '进入家属端', 'guardian', false)
-      Row({ space: 10 }) {
-        Button('体验老人端')
-          .layoutWeight(1)
-          .height(46)
-          .fontSize(16)
-          .borderRadius(16)
-          .fontColor('#0B7A5B')
-          .backgroundColor('#E7F5EF')
-          .onClick(() => this.enterApp('elder'))
-        Button('体验家属端')
-          .layoutWeight(1)
-          .height(46)
-          .fontSize(16)
-          .borderRadius(16)
-          .fontColor('#155EEF')
-          .backgroundColor('#EAF2FF')
-          .onClick(() => this.enterApp('guardian'))
-      }
-      .width('100%')
-      this.TrustCard()
+  @Builder LoginPanel() {
+    Column({ space: 16 }) {
+      Text('手机号登录')
+        .fontSize(24)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14213D')
+
+      this.InputField('手机号', '请输入手机号', this.phone, (value: string) => {
+        this.phone = value;
+      })
+      this.CodeField()
+
+      Button('登录并继续')
+        .width('100%')
+        .height(58)
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .borderRadius(22)
+        .backgroundColor('#0B7A5B')
+        .onClick(() => this.continueAfterLogin())
     }
     .width('100%')
+    .padding(20)
+    .borderRadius(26)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
   }
 
-  @Builder AuthPanel() {
+  @Builder RolePanel() {
     Column({ space: 16 }) {
       Row() {
         Button('返回')
@@ -120,52 +167,23 @@ struct LoginPage {
           .fontColor('#0B7A5B')
           .backgroundColor('#E7F5EF')
           .onClick(() => {
-            this.authStep = 'chooseRole';
+            this.authStep = 'login';
           })
         Blank()
-        Text(this.selectedRole === 'elder' ? '老人登录' : '家属登录')
+        Text('完善身份')
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
           .fontColor('#14213D')
       }
       .width('100%')
 
-      if (this.authStep === 'register') {
-        this.InputField('称呼', this.selectedRole === 'elder' ? '例如：张阿姨' : '例如：李女士', this.userName, (value: string) => {
-          this.userName = value;
-        })
-      }
+      Text('你是本人使用，还是帮助家人看护？')
+        .fontSize(18)
+        .lineHeight(26)
+        .fontColor('#52635F')
 
-      this.InputField('手机号', '请输入手机号', this.phone, (value: string) => {
-        this.phone = value;
-      })
-      this.CodeField()
-
-      Button(this.authStep === 'register' ? (this.selectedRole === 'elder' ? '注册老人账号' : '注册家属账号') : (this.selectedRole === 'elder' ? '进入老人端' : '进入家属端'))
-        .width('100%')
-        .height(58)
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .borderRadius(22)
-        .backgroundColor('#0B7A5B')
-        .onClick(() => {
-          if (this.authStep === 'register') {
-            this.submitRegister();
-          } else {
-            this.enterApp(this.selectedRole);
-          }
-        })
-
-      Button(this.authStep === 'register' ? '已有账号，去登录' : (this.selectedRole === 'elder' ? '没有账号？注册老人账号' : '没有账号？注册家属账号'))
-        .width('100%')
-        .height(44)
-        .fontSize(17)
-        .borderRadius(18)
-        .fontColor('#0B7A5B')
-        .backgroundColor('#FFFFFF')
-        .onClick(() => {
-          this.authStep = this.authStep === 'register' ? 'login' : 'register';
-        })
+      this.RoleChoice('本人使用', '查看今日服药，一键确认已吃药。', 'elder', true)
+      this.RoleChoice('我是家属', '绑定老人账号，查看服药和健康异常。', 'guardian', false)
     }
     .width('100%')
     .padding(20)
@@ -184,20 +202,20 @@ struct LoginPage {
           .fontColor('#0B7A5B')
           .backgroundColor('#E7F5EF')
           .onClick(() => {
-            this.authStep = 'register';
+            this.authStep = 'chooseRole';
           })
         Blank()
-        Text('绑定老人')
+        Text('绑定老人账号')
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
           .fontColor('#14213D')
       }
       .width('100%')
-      Text('把老人手机上的绑定码填到这里。演示绑定码为 AX2026。')
+      Text('请输入老人手机上“我的”页面显示的绑定码。')
         .fontSize(17)
         .lineHeight(25)
         .fontColor('#52635F')
-      this.InputField('绑定码', 'AX2026', this.bindCode, (value: string) => {
+      this.InputField('绑定码', '请输入绑定码', this.bindCode, (value: string) => {
         this.bindCode = value;
       })
       Button('完成绑定并进入')
@@ -216,50 +234,30 @@ struct LoginPage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  @Builder RoleCard(title: string, desc: string, action: string, role: UserRole, primary: boolean) {
-    Column({ space: 12 }) {
-      this.UsagePill(primary ? '本人使用' : '协助照护', primary ? '#0B7A5B' : '#155EEF', primary ? '#E7F5EF' : '#EAF2FF')
-      Text(title)
-        .fontSize(26)
+  @Builder RoleChoice(title: string, desc: string, role: UserRole, primary: boolean) {
+    Row({ space: 12 }) {
+      Column({ space: 5 }) {
+        Text(title)
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#14213D')
+        Text(desc)
+          .fontSize(15)
+          .lineHeight(22)
+          .fontColor('#667085')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      Text('进入')
+        .fontSize(16)
         .fontWeight(FontWeight.Bold)
-        .fontColor('#14213D')
-      Text(desc)
-        .fontSize(17)
-        .lineHeight(25)
-        .fontColor('#52635F')
-      Button(action)
-        .width('100%')
-        .height(58)
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .borderRadius(18)
-        .fontColor(primary ? '#FFFFFF' : '#155EEF')
-        .backgroundColor(primary ? '#0B7A5B' : '#EAF2FF')
-        .onClick(() => this.chooseRole(role))
-    }
-    .width('100%')
-    .padding(20)
-    .borderRadius(22)
-    .backgroundColor('#FFFFFF')
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder TrustCard() {
-    Column({ space: 8 }) {
-      Text('使用提示')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#14213D')
-      Text('演示版不会发送真实短信或调用真实蓝牙；用药剂量仍应以医生处方为准。')
-        .fontSize(15)
-        .lineHeight(22)
-        .fontColor('#667085')
+        .fontColor(primary ? '#0B7A5B' : '#155EEF')
     }
     .width('100%')
     .padding(16)
-    .borderRadius(18)
-    .backgroundColor('#FFFFFF')
-    .alignItems(HorizontalAlign.Start)
+    .borderRadius(20)
+    .backgroundColor(primary ? '#E7F5EF' : '#EAF2FF')
+    .onClick(() => this.chooseRole(role))
   }
 
   @Builder UsagePill(text: string, color: string, bgColor: string) {
@@ -295,7 +293,7 @@ struct LoginPage {
         .borderRadius(16)
         .fontColor('#0B7A5B')
         .backgroundColor('#E7F5EF')
-        .onClick(() => promptAction.showToast({ message: '验证码已发送（模拟）' }))
+        .onClick(() => this.requestCode())
     }
     .width('100%')
   }

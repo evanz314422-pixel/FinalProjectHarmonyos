@@ -1,14 +1,16 @@
-import { router } from '@kit.ArkUI';
-import { getMedicinePhotoColor, getMedicinePhotoLabel, getMedicinePhotoUri, isMedicinePhotoUploaded, Medicine, medicines } from '../models/AppData';
+import { router, promptAction } from '@kit.ArkUI';
+import { addCareActionRecord, addRefillTodo, getElderMedicines, getMedicinePhotoColor, getMedicinePhotoLabel, getMedicinePhotoUri, isMedicinePhotoUploaded, Medicine } from '../models/AppData';
 
 @Entry
 @Component
 struct InventoryPage {
+  @State arrangedRefill: string = '';
+
   build() {
     Scroll() {
       Column({ space: 14 }) {
         this.Header('库存管理')
-        ForEach(medicines, (item: Medicine) => {
+        ForEach(getElderMedicines(), (item: Medicine) => {
           Column({ space: 8 }) {
             Row({ space: 12 }) {
               this.MedicinePhoto(item.name, 54)
@@ -24,6 +26,20 @@ struct InventoryPage {
             Progress({ value: item.stock, total: 30, type: ProgressType.Linear })
               .color(item.stock <= item.threshold ? '#B42318' : '#0E7C66')
               .width('100%')
+            if (item.stock <= item.threshold) {
+              Button(this.arrangedRefill === item.name ? '已安排补药' : '安排补药')
+                .width('100%')
+                .height(42)
+                .fontSize(16)
+                .borderRadius(15)
+                .backgroundColor(this.arrangedRefill === item.name ? '#98A2B3' : '#0B7A5B')
+                .onClick(() => {
+                  this.arrangedRefill = item.name;
+                  addRefillTodo(item.name);
+                  addCareActionRecord('创建补药任务', item.name + '库存不足，已生成补药待办。', '家属处理');
+                  promptAction.showToast({ message: '已生成补药待办' });
+                })
+            }
           }.width('100%').padding(16).borderRadius(14).backgroundColor('#FFFFFF')
         }, (item: Medicine) => item.id.toString())
       }.padding(18)

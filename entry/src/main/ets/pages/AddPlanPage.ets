@@ -1,4 +1,5 @@
 import { router, promptAction } from '@kit.ArkUI';
+import { getWatchedElderId, plans } from '../models/AppData';
 
 @Entry
 @Component
@@ -8,6 +9,21 @@ struct AddPlanPage {
   @State timeTwo: string = '12:30';
   @State timeThree: string = '18:30';
   @State strongReminder: boolean = true;
+
+  private savePlan(): void {
+    const nextId: number = plans.length + 1;
+    plans.push({
+      id: nextId,
+      elderId: getWatchedElderId(),
+      medicineName: this.medicine,
+      times: [this.timeOne, this.timeTwo, this.timeThree],
+      dosage: '1片',
+      mealTime: '饭后',
+      enabled: true
+    });
+    promptAction.showToast({ message: '用药计划已保存' });
+    router.back();
+  }
 
   build() {
     Scroll() {
@@ -28,7 +44,7 @@ struct AddPlanPage {
         .borderRadius(14)
         .backgroundColor('#FFFFFF')
         Button('保存计划').width('100%').height(48).backgroundColor('#0E7C66')
-          .onClick(() => promptAction.showToast({ message: '用药计划已保存（模拟）' }))
+          .onClick(() => this.savePlan())
       }.padding(18)
     }.backgroundColor('#F4F7FA')
   }

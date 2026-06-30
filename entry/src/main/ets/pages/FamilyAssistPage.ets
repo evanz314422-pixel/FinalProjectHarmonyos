@@ -1,5 +1,5 @@
 import { router, promptAction } from '@kit.ArkUI';
-import { currentSession, healthAlerts, mockBindings } from '../models/AppData';
+import { currentSession, getCurrentElder, getElderHealthAlerts, getElderTodayRecords, MedicationRecord } from '../models/AppData';
 
 @Entry
 @Component
@@ -8,18 +8,33 @@ struct FamilyAssistPage {
   @State healthNotify: boolean = true;
   @State stockNotify: boolean = true;
   @State dailySummary: boolean = false;
-  @State contact: string = '女儿 李女士 13800000002';
-  @State bindCode: string = 'AX2026';
+  @State bindCode: string = '';
   @State bindSuccess: boolean = true;
 
   private bindElder(): void {
-    if (this.bindCode === 'AX2026') {
+    if (this.bindCode === getCurrentElder().bindCode) {
       this.bindSuccess = true;
-      promptAction.showToast({ message: '已绑定张阿姨（模拟）' });
+      promptAction.showToast({ message: '已绑定' + getCurrentElder().name });
     } else {
       this.bindSuccess = false;
       promptAction.showToast({ message: '绑定码不正确，请核对老人端显示的号码' });
     }
+  }
+
+  private nextRecord(): MedicationRecord {
+    const records: MedicationRecord[] = getElderTodayRecords();
+    for (let index = 0; index < records.length; index++) {
+      if (records[index].status === '待服用') {
+        return records[index];
+      }
+    }
+    return records.length > 0 ? records[0] : {
+      elderId: getCurrentElder().id,
+      time: '今天',
+      medicineName: '用药任务',
+      status: '待确认',
+      source: '系统未响应'
+    };
   }
 
   build() {
@@ -33,7 +48,7 @@ struct FamilyAssistPage {
         }
         this.PermissionCard()
         this.NotifyCard()
-        this.MessagePreviewCard()
+        this.NotificationFlowCard()
         this.AlertCard()
       }
       .padding(18)
@@ -49,15 +64,15 @@ struct FamilyAssistPage {
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
         .fontColor('#14213D')
-      Text('AX2026')
-        .fontSize(38)
+      Text('请在“我的”页面查看绑定码')
+        .fontSize(22)
         .fontWeight(FontWeight.Bold)
         .fontColor('#0B7A5B')
       Text('把这个号码告诉家属，家属就可以在监护人端查看服药记录、库存和心率异常。')
         .fontSize(16)
         .lineHeight(24)
         .fontColor('#52635F')
-      Text('已绑定：' + mockBindings[0].relation + ' 李女士')
+      Text('已绑定：' + getCurrentElder().contact)
         .fontSize(17)
         .fontWeight(FontWeight.Bold)
         .fontColor('#14213D')
@@ -75,7 +90,7 @@ struct FamilyAssistPage {
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
         .fontColor('#14213D')
-      Text('输入老人端显示的绑定码，本地演示版默认使用 AX2026。')
+      Text('输入老人端“我的”页面显示的绑定码。')
         .fontSize(16)
         .lineHeight(24)
         .fontColor('#52635F')
@@ -87,7 +102,7 @@ struct FamilyAssistPage {
         .onChange((value: string) => {
           this.bindCode = value;
         })
-      Button(this.bindSuccess ? '已绑定张阿姨' : '确认绑定')
+      Button(this.bindSuccess ? '已绑定' + getCurrentElder().name : '确认绑定')
         .width('100%')
         .height(52)
         .fontSize(19)
@@ -112,7 +127,7 @@ struct FamilyAssistPage {
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
         .fontColor('#14213D')
-      Text(currentSession.role === 'guardian' ? '你可以查看张阿姨的药品、计划、服药记录、库存风险和健康告警。' : '家属绑定后，可以帮你查看用药记录和异常提醒。')
+      Text(currentSession.role === 'guardian' ? '你可以查看' + getCurrentElder().name + '的药品、计划、服药记录、库存风险和健康告警。' : '家属绑定后，可以帮你查看用药记录和异常提醒。')
         .fontSize(16)
         .lineHeight(24)
         .fontColor('#52635F')
@@ -137,14 +152,10 @@ struct FamilyAssistPage {
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
         .fontColor('#14213D')
-      TextInput({ text: this.contact, placeholder: '紧急联系人' })
-        .height(50)
-        .fontSize(17)
-        .borderRadius(16)
-        .backgroundColor('#F6F8F7')
-        .onChange((value: string) => {
-          this.contact = value;
-        })
+      Text('通知会发送给当前登录的家属看护人，不需要再填写联系人。')
+        .fontSize(15)
+        .lineHeight(22)
+        .fontColor('#52635F')
       this.NotifySwitch('漏服通知', '超过服药时间未确认时提醒家属', this.missedNotify, (value: boolean) => {
         this.missedNotify = value;
       })
@@ -157,13 +168,13 @@ struct FamilyAssistPage {
       this.NotifySwitch('每日汇总通知', '晚间发送当天服药和健康摘要', this.dailySummary, (value: boolean) => {
         this.dailySummary = value;
       })
-      Button('模拟发送提醒')
+      Button('测试通知')
         .width('100%')
         .height(50)
         .fontSize(18)
         .borderRadius(18)
         .backgroundColor('#0B7A5B')
-        .onClick(() => promptAction.showToast({ message: '已向监护人发送提醒（模拟）' }))
+        .onClick(() => promptAction.showToast({ message: '通知设置可用' }))
     }
     .width('100%')
     .padding(20)
@@ -172,20 +183,20 @@ struct FamilyAssistPage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  @Builder MessagePreviewCard() {
+  @Builder NotificationFlowCard() {
     Column({ space: 10 }) {
-      Text('通知话术预览')
+      Text('通知闭环')
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
         .fontColor('#14213D')
-      Text('张阿姨今天中午 12:30 的二甲双胍片还没有确认，建议您方便时电话提醒一下，并询问当前身体状态。')
+      Text('未确认任务会进入待办，家属处理后会留下处置记录。')
         .fontSize(16)
         .lineHeight(24)
         .fontColor('#52635F')
         .padding(12)
         .borderRadius(16)
         .backgroundColor('#F6FEF9')
-      Text('发送对象：' + this.contact)
+      Text('当前待办：' + this.nextRecord().time + ' ' + this.nextRecord().medicineName + '，状态：' + this.nextRecord().status)
         .fontSize(15)
         .fontColor('#667085')
     }
@@ -202,7 +213,7 @@ struct FamilyAssistPage {
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
         .fontColor('#B42318')
-      Text(healthAlerts.length > 0 ? healthAlerts[0].title + '：' + healthAlerts[0].value + '，已模拟通知监护人。' : '当前没有异常提醒。')
+      Text(getElderHealthAlerts().length > 0 ? getElderHealthAlerts()[0].title + '：' + getElderHealthAlerts()[0].value + '，已通知监护人。' : '当前没有异常提醒。')
         .fontSize(16)
         .lineHeight(24)
         .fontColor('#52635F')

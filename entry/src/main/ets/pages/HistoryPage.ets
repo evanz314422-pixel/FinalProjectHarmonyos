@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { MedicationRecord, historyRecords } from '../models/AppData';
+import { CareActionRecord, getElderCareActionRecords, getElderHistoryRecords, MedicationRecord } from '../models/AppData';
 
 @Entry
 @Component
@@ -31,6 +31,14 @@ struct HistoryPage {
           .fontSize(16)
           .lineHeight(24)
           .fontColor('#52635F')
+        Button('查看看护分析')
+          .width('100%')
+          .height(48)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .borderRadius(18)
+          .backgroundColor('#0B7A5B')
+          .onClick(() => router.pushUrl({ url: 'pages/StatsPage' }))
         Row({ space: 8 }) {
           this.FilterChip('全部')
           this.FilterChip('已服用')
@@ -38,11 +46,15 @@ struct HistoryPage {
           this.FilterChip('延迟服用')
         }
         .width('100%')
-        ForEach(historyRecords, (item: MedicationRecord) => {
+        ForEach(getElderHistoryRecords(), (item: MedicationRecord) => {
           if (this.shouldShow(item)) {
             this.RecordCard(item)
           }
         }, (item: MedicationRecord) => item.time + item.medicineName)
+        this.SectionTitle('处理记录')
+        ForEach(getElderCareActionRecords(), (item: CareActionRecord) => {
+          this.CareRecordCard(item)
+        }, (item: CareActionRecord) => item.time + item.title + item.source)
       }
       .padding(18)
     }
@@ -94,7 +106,7 @@ struct HistoryPage {
         Text(item.medicineName)
           .fontSize(16)
           .fontColor('#52635F')
-        Text(item.status === '漏服' ? '建议复盘该时间段提醒是否足够。' : '记录来源：本地模拟服药记录。')
+        Text('记录来源：' + (item.source === undefined ? '系统未响应' : item.source))
           .fontSize(13)
           .fontColor('#667085')
       }
@@ -112,5 +124,34 @@ struct HistoryPage {
     .padding(16)
     .borderRadius(18)
     .backgroundColor('#FFFFFF')
+  }
+
+  @Builder SectionTitle(title: string) {
+    Text(title)
+      .fontSize(22)
+      .fontWeight(FontWeight.Bold)
+      .fontColor('#14213D')
+      .width('100%')
+  }
+
+  @Builder CareRecordCard(item: CareActionRecord) {
+    Column({ space: 5 }) {
+      Text(item.time + '  ' + item.title)
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14213D')
+      Text(item.desc)
+        .fontSize(15)
+        .lineHeight(22)
+        .fontColor('#52635F')
+      Text('来源：' + item.source)
+        .fontSize(13)
+        .fontColor('#667085')
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(18)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
   }
 }

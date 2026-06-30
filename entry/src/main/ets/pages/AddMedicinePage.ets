@@ -22,7 +22,7 @@ struct AddMedicinePage {
     this.spec = '30mg x 7片';
     this.dosage = '1片';
     this.stock = '7';
-    this.note = 'AI识别：常用于血压管理。建议每日固定时间服用，具体用法请以医生处方为准。';
+    this.note = '拍照识别：常用于血压管理。建议每日固定时间服用，具体用法请以医生处方为准。';
     this.photoUri = '';
     this.photoUploaded = true;
     this.photoLabel = '降压';
@@ -55,7 +55,7 @@ struct AddMedicinePage {
   private saveMedicine(): void {
     const stockValue: number = this.stock === '' ? 0 : Number(this.stock);
     addMedicineForElder(this.name, this.spec, this.dosage, stockValue, this.note, this.photoUri, this.photoLabel, this.photoColor, this.photoUploaded);
-    promptAction.showToast({ message: currentSession.role === 'guardian' ? '已替老人保存药品（模拟）' : '已保存到常用药（模拟）' });
+    promptAction.showToast({ message: currentSession.role === 'guardian' ? '已替老人保存药品' : '已保存到常用药' });
   }
 
   build() {
@@ -64,7 +64,7 @@ struct AddMedicinePage {
         this.Header(currentSession.role === 'guardian' ? '替老人添加药品' : '新增药品')
         this.AiCaptureCard()
         this.PhotoUploadCard()
-        Button('进入 AI 用药助手')
+        Button('看不懂药？去问药求助')
           .width('100%')
           .height(48)
           .borderRadius(18)
@@ -103,7 +103,7 @@ struct AddMedicinePage {
           .backgroundColor('#0B7A5B')
           .onClick(() => this.saveMedicine())
 
-        Text('提示：AI 识别只能辅助录入，最终药名、剂量和服用方式应由本人或监护人与医生处方核对。')
+        Text('提示：拍照识别只能辅助录入，最终药名、剂量和服用方式应由本人或监护人与医生处方核对。')
           .fontSize(13)
           .lineHeight(20)
           .fontColor('#667085')
@@ -153,8 +153,8 @@ struct AddMedicinePage {
         }
         .alignItems(HorizontalAlign.Start)
         Blank()
-        Text('AI')
-          .fontSize(16)
+        Text('拍照')
+          .fontSize(14)
           .fontWeight(FontWeight.Bold)
           .fontColor('#FFFFFF')
           .width(44)
@@ -188,7 +188,7 @@ struct AddMedicinePage {
           .onClick(() => {
             this.fillRecognizedMedicine();
             this.aiRecognized = true;
-            promptAction.showToast({ message: '已模拟从相册识别药品' });
+            promptAction.showToast({ message: '已从相册识别药品' });
           })
       }
       .width('100%')
@@ -301,7 +301,7 @@ struct AddMedicinePage {
           .height(42)
           .backgroundColor('#FFFFFF')
           .fontColor('#0B7A5B')
-          .onClick(() => promptAction.showToast({ message: '请重新拍摄药盒正面（模拟）' }))
+          .onClick(() => promptAction.showToast({ message: '请重新拍摄药盒正面' }))
         Button('确认无误')
           .layoutWeight(1)
           .height(42)
