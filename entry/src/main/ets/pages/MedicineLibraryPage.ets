@@ -8,10 +8,6 @@ struct MedicineLibraryPage {
     Scroll() {
       Column({ space: 14 }) {
         this.Header('药品管理')
-        Text('药品、库存和详情集中在这里，避免老人和家属在多个入口之间来回找。')
-          .fontSize(15)
-          .lineHeight(22)
-          .fontColor('#667085')
         Button('+ 添加药品').width('100%').onClick(() => router.pushUrl({ url: 'pages/AddMedicinePage' }))
         ForEach(getElderMedicines(), (item: Medicine) => {
           Row({ space: 12 }) {

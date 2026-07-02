@@ -4,7 +4,7 @@ import { addCareActionRecord, addRefillTodo, getElderMedicines, getMedicinePhoto
 @Entry
 @Component
 struct InventoryPage {
-  @State arrangedRefill: string = '';
+  @State refreshToken: number = 0;
 
   build() {
     Scroll() {
@@ -27,21 +27,25 @@ struct InventoryPage {
               .color(item.stock <= item.threshold ? '#B42318' : '#0E7C66')
               .width('100%')
             if (item.stock <= item.threshold) {
-              Button(this.arrangedRefill === item.name ? '已安排补药' : '安排补药')
+              Button(item.refillArranged ? '已安排补药' : '安排补药')
                 .width('100%')
                 .height(42)
                 .fontSize(16)
                 .borderRadius(15)
-                .backgroundColor(this.arrangedRefill === item.name ? '#98A2B3' : '#0B7A5B')
+                .backgroundColor(item.refillArranged ? '#98A2B3' : '#0B7A5B')
                 .onClick(() => {
-                  this.arrangedRefill = item.name;
+                  if (item.refillArranged) {
+                    promptAction.showToast({ message: '这项补药已经安排过了' });
+                    return;
+                  }
                   addRefillTodo(item.name);
-                  addCareActionRecord('创建补药任务', item.name + '库存不足，已生成补药待办。', '家属处理');
-                  promptAction.showToast({ message: '已生成补药待办' });
+                  addCareActionRecord('安排补药', item.name + '库存不足，已记录补药安排。', '家属处理');
+                  this.refreshToken++;
+                  promptAction.showToast({ message: '已安排补药' });
                 })
             }
           }.width('100%').padding(16).borderRadius(14).backgroundColor('#FFFFFF')
-        }, (item: Medicine) => item.id.toString())
+        }, (item: Medicine) => item.id.toString() + (item.refillArranged ? 'done' : 'open') + this.refreshToken.toString())
       }.padding(18)
     }.backgroundColor('#F4F7FA')
   }

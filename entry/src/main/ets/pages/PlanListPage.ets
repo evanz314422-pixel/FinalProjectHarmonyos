@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { getElderPlans, getMedicinePhotoColor, getMedicinePhotoLabel, getMedicinePhotoUri, isMedicinePhotoUploaded, MedicationPlan, selectPlan } from '../models/AppData';
+import { getElderPlans, getMedicinePhotoColor, getMedicinePhotoLabel, getMedicinePhotoUri, isMedicinePhotoUploaded, MedicationPlan, selectPlan, startCreatePlan } from '../models/AppData';
 
 @Entry
 @Component
@@ -8,7 +8,10 @@ struct PlanListPage {
     Scroll() {
       Column({ space: 14 }) {
         this.Header('用药计划')
-        Button('+ 新增计划').width('100%').onClick(() => router.pushUrl({ url: 'pages/AddPlanPage' }))
+        Button('+ 新增计划').width('100%').onClick(() => {
+          startCreatePlan();
+          router.pushUrl({ url: 'pages/AddPlanPage' });
+        })
         ForEach(getElderPlans(), (plan: MedicationPlan) => {
           Row({ space: 12 }) {
             this.MedicinePhoto(plan.medicineName, 58)
@@ -28,7 +31,7 @@ struct PlanListPage {
             selectPlan(plan.id);
             router.pushUrl({ url: 'pages/PlanDetailPage' });
           })
-        }, (plan: MedicationPlan) => plan.id.toString())
+        }, (plan: MedicationPlan) => plan.id.toString() + plan.enabled.toString() + plan.times.join('-'))
       }.padding(18)
     }.backgroundColor('#F4F7FA')
   }

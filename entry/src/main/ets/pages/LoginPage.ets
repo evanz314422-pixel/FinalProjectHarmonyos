@@ -1,5 +1,15 @@
 import { router, promptAction } from '@kit.ArkUI';
-import { FamilyBinding, familyBindings, selectElder, UserRole, setSession } from '../models/AppData';
+import {
+  createUserAccount,
+  ensureFamilyBinding,
+  FamilyBinding,
+  familyBindings,
+  findUserByPhone,
+  selectElder,
+  setSessionForUser,
+  UserProfile,
+  UserRole
+} from '../models/AppData';
 
 type AuthStep = 'login' | 'chooseRole' | 'bindElder';
 
@@ -11,6 +21,11 @@ struct LoginPage {
   @State phone: string = '';
   @State code: string = '';
   @State bindCode: string = '';
+  @State authenticatedUserId: number = 0;
+  @State authenticatedRole: UserRole = 'elder';
+  @State codeRequested: boolean = false;
+  @State requestedPhone: string = '';
+  @State isNewAccount: boolean = false;
 
   private isValidPhone(): boolean {
     if (this.phone.length !== 11) {
@@ -46,7 +61,11 @@ struct LoginPage {
       promptAction.showToast({ message: '请输入正确的11位手机号' });
       return;
     }
-    promptAction.showToast({ message: '验证码已发送' });
+    const user: UserProfile | undefined = findUserByPhone(this.phone);
+    this.isNewAccount = user === undefined;
+    this.codeRequested = true;
+    this.requestedPhone = this.phone;
+    promptAction.showToast({ message: this.isNewAccount ? '验证码已发送，稍后完善身份' : '验证码已发送' });
   }
 
   private continueAfterLogin(): void {
@@ -58,32 +77,63 @@ struct LoginPage {
       promptAction.showToast({ message: '请输入6位数字验证码' });
       return;
     }
+    if (!this.codeRequested || this.requestedPhone !== this.phone) {
+      promptAction.showToast({ message: '请先获取验证码' });
+      return;
+    }
+    const user: UserProfile | undefined = findUserByPhone(this.phone);
+    if (user === undefined) {
+      this.isNewAccount = true;
+      this.authenticatedUserId = 0;
+      this.authStep = 'chooseRole';
+      promptAction.showToast({ message: '请完善使用身份' });
+      return;
+    }
+    this.isNewAccount = false;
+    this.authenticatedUserId = user.id;
+    this.authenticatedRole = user.role;
+    this.selectedRole = user.role;
     this.authStep = 'chooseRole';
     promptAction.showToast({ message: '请确认使用身份' });
   }
 
   private chooseRole(role: UserRole): void {
+    if (!this.isNewAccount && role !== this.authenticatedRole) {
+      promptAction.showToast({ message: role === 'elder' ? '当前手机号不是老人账号' : '当前手机号不是家属账号' });
+      return;
+    }
     this.selectedRole = role;
+    if (this.isNewAccount) {
+      const createdUser: UserProfile = createUserAccount(this.phone, role);
+      this.authenticatedUserId = createdUser.id;
+      this.authenticatedRole = createdUser.role;
+    }
     if (role === 'elder') {
-      this.enterApp('elder');
+      this.enterApp();
     } else {
       this.authStep = 'bindElder';
     }
   }
 
-  private enterApp(role: UserRole): void {
-    setSession(role);
-    promptAction.showToast({ message: role === 'elder' ? '已进入老人端' : '已进入家属端' });
+  private enterApp(): void {
+    setSessionForUser(this.authenticatedUserId);
+    promptAction.showToast({ message: this.authenticatedRole === 'elder' ? '已进入老人端' : '已进入家属端' });
     router.replaceUrl({ url: 'pages/Index' });
   }
 
   private submitBind(): void {
+    const normalizedCode: string = this.bindCode.trim().toUpperCase();
+    if (normalizedCode === '') {
+      promptAction.showToast({ message: '请输入老人绑定码' });
+      return;
+    }
     for (let index = 0; index < familyBindings.length; index++) {
       const item: FamilyBinding = familyBindings[index];
-      if (this.bindCode === item.code) {
+      if (normalizedCode === item.code) {
+        ensureFamilyBinding(item.elderId, this.authenticatedUserId, item.code);
         selectElder(item.elderId);
         promptAction.showToast({ message: '绑定成功' });
-        this.enterApp('guardian');
+        this.enterApp();
         return;
       }
     }
@@ -131,17 +181,20 @@ struct LoginPage {
 
   @Builder LoginPanel() {
     Column({ space: 16 }) {
-      Text('手机号登录')
+      Text('手机号登录 / 注册')
         .fontSize(24)
         .fontWeight(FontWeight.Bold)
         .fontColor('#14213D')
 
       this.InputField('手机号', '请输入手机号', this.phone, (value: string) => {
         this.phone = value;
+        this.codeRequested = false;
+        this.requestedPhone = '';
+        this.isNewAccount = false;
       })
       this.CodeField()
 
-      Button('登录并继续')
+      Button('继续')
         .width('100%')
         .height(58)
         .fontSize(20)
@@ -182,8 +235,19 @@ struct LoginPage {
         .lineHeight(26)
         .fontColor('#52635F')
 
-      this.RoleChoice('本人使用', '查看今日服药，一键确认已吃药。', 'elder', true)
-      this.RoleChoice('我是家属', '绑定老人账号，查看服药和健康异常。', 'guardian', false)
+      Text(this.isNewAccount ? '这是新手机号，请选择使用身份完成注册。' : '系统已根据手机号识别账号身份，请确认后继续。')
+        .fontSize(15)
+        .lineHeight(22)
+        .fontColor('#667085')
+
+      if (this.isNewAccount) {
+        this.RoleChoice('本人使用', '创建老人账号，查看今日服药并确认已吃药。', 'elder', true)
+        this.RoleChoice('我是家属', '创建家属账号，绑定老人后查看看护信息。', 'guardian', false)
+      } else if (this.authenticatedRole === 'elder') {
+        this.RoleChoice('本人使用', '查看今日服药，一键确认已吃药。', 'elder', true)
+      } else {
+        this.RoleChoice('我是家属', '绑定老人账号，查看服药和健康异常。', 'guardian', false)
+      }
     }
     .width('100%')
     .padding(20)

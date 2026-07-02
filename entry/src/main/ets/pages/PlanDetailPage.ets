@@ -1,5 +1,5 @@
 import { router, promptAction } from '@kit.ArkUI';
-import { getSelectedPlan, MedicationPlan } from '../models/AppData';
+import { deleteSelectedPlan, getSelectedPlan, MedicationPlan, setSelectedPlanEnabled, startEditSelectedPlan } from '../models/AppData';
 
 @Entry
 @Component
@@ -8,6 +8,12 @@ struct PlanDetailPage {
 
   private currentPlan(): MedicationPlan {
     return getSelectedPlan();
+  }
+
+  private deletePlan(): void {
+    const removedName: string = deleteSelectedPlan();
+    promptAction.showToast({ message: '已删除' + removedName + '用药计划' });
+    router.back();
   }
 
   build() {
@@ -23,13 +29,17 @@ struct PlanDetailPage {
             Blank()
             Toggle({ type: ToggleType.Switch, isOn: this.currentPlan().enabled })
               .onChange((value: boolean) => {
-                this.currentPlan().enabled = value;
+                setSelectedPlanEnabled(value);
                 this.planEnabled = value;
+                promptAction.showToast({ message: value ? '计划已启用，今日记录已同步' : '计划已暂停，未完成提醒已移除' });
               })
           }.width('100%')
-          Button('修改计划').width('100%').onClick(() => router.pushUrl({ url: 'pages/AddPlanPage' }))
+          Button('修改计划').width('100%').onClick(() => {
+            startEditSelectedPlan();
+            router.pushUrl({ url: 'pages/AddPlanPage' });
+          })
           Button('删除计划').width('100%').backgroundColor('#B42318')
-            .onClick(() => promptAction.showDialog({ title: '删除计划', message: '删除后将停止该计划提醒。' }))
+            .onClick(() => this.deletePlan())
         }
         .width('100%')
         .padding(18)

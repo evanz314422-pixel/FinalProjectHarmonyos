@@ -1,4 +1,5 @@
 import { router, promptAction } from '@kit.ArkUI';
+import { addCareActionRecord, getCurrentElder } from '../models/AppData';
 
 @Entry
 @Component
@@ -57,6 +58,7 @@ struct AIAssistantPage {
         .backgroundColor('#0B7A5B')
         .onClick(() => {
           this.helpResult = '已拍照。请让家属核对药名和吃法，不要自己加量或停药。';
+          addCareActionRecord('问药求助', getCurrentElder().name + '拍照求助：需要家属核对药名和吃法。', '老人端');
           promptAction.showToast({ message: '已拍照求助' });
         })
       this.ResultBox()
@@ -81,6 +83,7 @@ struct AIAssistantPage {
         .onClick(() => {
           this.voiceText = '我看不清这个药，帮我看看怎么吃。';
           this.helpResult = '已记录你的问题。建议先联系家属确认，再按医生处方服用。';
+          addCareActionRecord('语音问药', getCurrentElder().name + '语音求助：' + this.voiceText, '老人端');
           promptAction.showToast({ message: '已记录语音求助' });
         })
       Text(this.voiceText === '' ? '按住后，说出你想问的问题。' : this.voiceText)
@@ -111,6 +114,7 @@ struct AIAssistantPage {
         .backgroundColor('#155EEF')
         .onClick(() => {
           this.helpResult = '已提醒家属。等待家属确认前，请不要自行改变吃法。';
+          addCareActionRecord('老人求助', getCurrentElder().name + '请求家属协助确认用药。', '老人端');
           promptAction.showToast({ message: '已提醒家属' });
         })
       Text('家属：李女士 13800000002')

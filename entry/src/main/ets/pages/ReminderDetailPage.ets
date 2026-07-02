@@ -1,5 +1,5 @@
 import { router, promptAction } from '@kit.ArkUI';
-import { getSelectedReminder, MedicationRecord } from '../models/AppData';
+import { getSelectedReminder, MedicationRecord, postponeMedicationReminder, updateReminderStatus } from '../models/AppData';
 
 @Entry
 @Component
@@ -11,10 +11,15 @@ struct ReminderDetailPage {
   }
 
   private markDone(): void {
-    this.currentReminder().status = '已服用';
-    this.currentReminder().source = '老人确认';
+    updateReminderStatus(this.currentReminder(), '已服用', '老人确认');
     this.refreshToken++;
     promptAction.showToast({ message: '已记录为按时服用' });
+  }
+
+  private postponeReminder(): void {
+    postponeMedicationReminder(this.currentReminder(), '老人确认');
+    this.refreshToken++;
+    promptAction.showToast({ message: '已设置稍后提醒' });
   }
 
   build() {
@@ -28,7 +33,7 @@ struct ReminderDetailPage {
         Text('如已服用，请在这里确认；如果不确定，建议联系家属核对。').fontSize(15).fontColor('#667085')
         Button('已按时服用').width('100%').height(48).backgroundColor('#0E7C66')
           .onClick(() => this.markDone())
-        Button('稍后提醒').width('100%').onClick(() => promptAction.showToast({ message: '10 分钟后再次提醒' }))
+        Button('稍后提醒').width('100%').onClick(() => this.postponeReminder())
       }
       .width('100%')
       .padding(20)

@@ -1,6 +1,7 @@
 export type UserRole = 'elder' | 'guardian';
 export type HealthMetricType = 'heartRate' | 'bloodPressure' | 'bloodSugar';
 export type RecordSource = '老人确认' | '家属补记' | '设备同步' | '系统未响应';
+export type PlanFormMode = 'create' | 'edit';
 
 export interface ElderProfile {
   id: number;
@@ -17,6 +18,7 @@ export interface UserProfile {
   phone: string;
   role: UserRole;
   relation?: string;
+  elderId?: number;
 }
 
 export interface FamilyBinding {
@@ -24,6 +26,12 @@ export interface FamilyBinding {
   guardianId: number;
   code: string;
   relation: string;
+}
+
+export interface ElderPreference {
+  elderId: number;
+  largeText: boolean;
+  strongReminder: boolean;
 }
 
 export interface Session {
@@ -44,6 +52,7 @@ export interface Medicine {
   photoLabel: string;
   photoColor: string;
   photoUploaded: boolean;
+  refillArranged?: boolean;
 }
 
 export interface MedicationPlan {
@@ -82,6 +91,8 @@ export interface HealthAlert {
   value: string;
   time: string;
   notified: boolean;
+  retestRequested?: boolean;
+  resolved?: boolean;
 }
 
 export interface DeviceStatus {
@@ -98,21 +109,18 @@ export interface MenuItem {
   url: string;
 }
 
-export interface CareTodo {
-  elderId: number;
-  title: string;
-  desc: string;
-  level: string;
-  action: string;
-  url: string;
-}
-
 export interface CareActionRecord {
   elderId: number;
   time: string;
   title: string;
   desc: string;
   source: string;
+}
+
+export interface StockUpdateResult {
+  found: boolean;
+  lowStock: boolean;
+  refillCleared: boolean;
 }
 
 export interface NotificationPreference {
@@ -122,12 +130,16 @@ export interface NotificationPreference {
 }
 
 export const users: UserProfile[] = [
-  { id: 1, name: '张阿姨', phone: '13800000001', role: 'elder' },
+  { id: 1, name: '张阿姨', phone: '13800000001', role: 'elder', elderId: 1 },
   { id: 2, name: '李女士', phone: '13800000002', role: 'guardian', relation: '女儿' }
 ];
 
 export const familyBindings: FamilyBinding[] = [
   { elderId: 1, guardianId: 2, code: 'AX2026', relation: '女儿' }
+];
+
+export const elderPreferences: ElderPreference[] = [
+  { elderId: 1, largeText: false, strongReminder: true }
 ];
 
 export const elderProfiles: ElderProfile[] = [
@@ -143,13 +155,14 @@ export let selectedMedicineName: string = '二甲双胍片';
 export let selectedElderId: number = 1;
 export let selectedPlanId: number = 1;
 export let selectedReminderKey: string = '1|12:30|二甲双胍片';
+export let planFormMode: PlanFormMode = 'create';
 
 export const deviceStatus: DeviceStatus = {
   elderId: 1,
   name: '安心健康手环 S1',
-  connected: false,
+  connected: true,
   battery: 86,
-  lastSync: '尚未同步'
+  lastSync: '今天 09:18'
 };
 
 export const medicines: Medicine[] = [
@@ -194,70 +207,33 @@ export const medicines: Medicine[] = [
     photoLabel: '阿司',
     photoColor: '#EAF2FF',
     photoUploaded: true
-  },
-  {
-    id: 4,
-    elderId: 3,
-    name: '瑞舒伐他汀钙片',
-    spec: '10mg x 28片',
-    dosage: '1片',
-    stock: 16,
-    threshold: 7,
-    note: '晚饭后服用，注意定期复查血脂。',
-    photoUri: '',
-    photoLabel: '降脂',
-    photoColor: '#EAF2FF',
-    photoUploaded: true
-  },
-  {
-    id: 5,
-    elderId: 3,
-    name: '缬沙坦胶囊',
-    spec: '80mg x 14粒',
-    dosage: '1粒',
-    stock: 5,
-    threshold: 6,
-    note: '每日固定时间服用，注意监测血压。',
-    photoUri: '',
-    photoLabel: '血压',
-    photoColor: '#FFF7E8',
-    photoUploaded: true
   }
 ];
 
 export const plans: MedicationPlan[] = [
   { id: 1, elderId: 1, medicineName: '二甲双胍片', times: ['08:00', '12:30', '18:30'], dosage: '1片', mealTime: '饭后', enabled: true },
   { id: 2, elderId: 1, medicineName: '硝苯地平控释片', times: ['07:30'], dosage: '1片', mealTime: '早餐后', enabled: true },
-  { id: 3, elderId: 1, medicineName: '阿司匹林肠溶片', times: ['21:00'], dosage: '1片', mealTime: '睡前', enabled: false },
-  { id: 4, elderId: 3, medicineName: '瑞舒伐他汀钙片', times: ['20:30'], dosage: '1片', mealTime: '晚饭后', enabled: true },
-  { id: 5, elderId: 3, medicineName: '缬沙坦胶囊', times: ['08:30'], dosage: '1粒', mealTime: '早餐后', enabled: true }
+  { id: 3, elderId: 1, medicineName: '阿司匹林肠溶片', times: ['21:00'], dosage: '1片', mealTime: '睡前', enabled: false }
 ];
 
 export const todayRecords: MedicationRecord[] = [
   { elderId: 1, time: '07:30', medicineName: '硝苯地平控释片', status: '已服用', source: '老人确认' },
   { elderId: 1, time: '08:00', medicineName: '二甲双胍片', status: '已服用', source: '老人确认' },
   { elderId: 1, time: '12:30', medicineName: '二甲双胍片', status: '待服用', source: '系统未响应' },
-  { elderId: 1, time: '18:30', medicineName: '二甲双胍片', status: '待服用', source: '系统未响应' },
-  { elderId: 3, time: '08:30', medicineName: '缬沙坦胶囊', status: '已服用', source: '老人确认' },
-  { elderId: 3, time: '20:30', medicineName: '瑞舒伐他汀钙片', status: '待服用', source: '系统未响应' }
+  { elderId: 1, time: '18:30', medicineName: '二甲双胍片', status: '待服用', source: '系统未响应' }
 ];
 
 export const historyRecords: MedicationRecord[] = [
   { elderId: 1, time: '5月30日 08:00', medicineName: '二甲双胍片', status: '已服用', source: '老人确认' },
   { elderId: 1, time: '5月30日 12:30', medicineName: '二甲双胍片', status: '漏服', source: '系统未响应' },
   { elderId: 1, time: '5月31日 07:30', medicineName: '硝苯地平控释片', status: '已服用', source: '设备同步' },
-  { elderId: 1, time: '5月31日 18:30', medicineName: '二甲双胍片', status: '延迟服用', source: '家属补记' },
-  { elderId: 3, time: '5月31日 08:30', medicineName: '缬沙坦胶囊', status: '已服用', source: '老人确认' },
-  { elderId: 3, time: '5月31日 20:30', medicineName: '瑞舒伐他汀钙片', status: '已服用', source: '老人确认' }
+  { elderId: 1, time: '5月31日 18:30', medicineName: '二甲双胍片', status: '延迟服用', source: '家属补记' }
 ];
 
 export const healthMetrics: HealthMetric[] = [
   { elderId: 1, type: 'heartRate', name: '心率', value: '116 次/分', numericValue: 116, unit: '次/分', time: '今天 09:18', normal: false },
   { elderId: 1, type: 'bloodPressure', name: '血压', value: '128/82 mmHg', numericValue: 128, unit: 'mmHg', time: '今天 07:20', normal: true },
-  { elderId: 1, type: 'bloodSugar', name: '空腹血糖', value: '6.2 mmol/L', numericValue: 6.2, unit: 'mmol/L', time: '今天 07:10', normal: true },
-  { elderId: 3, type: 'heartRate', name: '心率', value: '78 次/分', numericValue: 78, unit: '次/分', time: '今天 08:40', normal: true },
-  { elderId: 3, type: 'bloodPressure', name: '血压', value: '132/84 mmHg', numericValue: 132, unit: 'mmHg', time: '今天 08:35', normal: true },
-  { elderId: 3, type: 'bloodSugar', name: '空腹血糖', value: '5.8 mmol/L', numericValue: 5.8, unit: 'mmol/L', time: '今天 07:30', normal: true }
+  { elderId: 1, type: 'bloodSugar', name: '空腹血糖', value: '6.2 mmol/L', numericValue: 6.2, unit: 'mmol/L', time: '今天 07:10', normal: true }
 ];
 
 export const healthAlerts: HealthAlert[] = [
@@ -271,61 +247,9 @@ export const healthAlerts: HealthAlert[] = [
   }
 ];
 
-export const careTodos: CareTodo[] = [
-  {
-    elderId: 1,
-    title: '确认午间服药',
-    desc: '12:30 二甲双胍片尚未确认，建议电话确认。',
-    level: '高优先级',
-    action: '电话确认',
-    url: 'pages/FamilyAssistPage'
-  },
-  {
-    elderId: 1,
-    title: '复测心率',
-    desc: '今天 09:18 心率 116 次/分，建议休息后复测。',
-    level: '需关注',
-    action: '发复测提醒',
-    url: 'pages/HealthMetricPage'
-  },
-  {
-    elderId: 1,
-    title: '补充低库存药品',
-    desc: '硝苯地平控释片剩余 6 片，低于提醒阈值。',
-    level: '待处理',
-    action: '处理补药',
-    url: 'pages/InventoryPage'
-  },
-  {
-    elderId: 1,
-    title: '晚间用药提醒',
-    desc: '18:30 二甲双胍片，建议提前 10 分钟轻提醒。',
-    level: '计划中',
-    action: '调整提醒',
-    url: 'pages/PlanListPage'
-  },
-  {
-    elderId: 3,
-    title: '晚间服药提醒',
-    desc: '20:30 瑞舒伐他汀钙片待服用，建议晚饭后提醒。',
-    level: '计划中',
-    action: '提醒老人',
-    url: 'pages/PlanListPage'
-  },
-  {
-    elderId: 3,
-    title: '补充血压药',
-    desc: '缬沙坦胶囊剩余 5 粒，低于提醒阈值。',
-    level: '待处理',
-    action: '处理补药',
-    url: 'pages/InventoryPage'
-  }
-];
-
 export const careActionRecords: CareActionRecord[] = [
   { elderId: 1, time: '今天 09:18', title: '系统提醒', desc: '发现心率偏高，建议联系老人复测。', source: '设备同步' },
-  { elderId: 1, time: '今天 12:35', title: '电话确认', desc: '午间服药未确认，等待家属联系。', source: '系统未响应' },
-  { elderId: 3, time: '今天 08:45', title: '服药确认', desc: '早间血压药已由老人确认。', source: '老人确认' }
+  { elderId: 1, time: '今天 12:35', title: '电话确认', desc: '午间服药未确认，等待家属联系。', source: '系统未响应' }
 ];
 
 export const notificationPreferences: NotificationPreference[] = [
@@ -342,9 +266,8 @@ export const menus: MenuItem[] = [
   { title: '新增计划', desc: '设置服药时间和频次', url: 'pages/AddPlanPage' },
   { title: '提醒详情', desc: '确认下一次服药任务', url: 'pages/ReminderDetailPage' },
   { title: '补记服药', desc: '只用于漏记后的补充记录', url: 'pages/CheckInPage' },
-  { title: '记录分析', desc: '查看历史和完成率', url: 'pages/HistoryPage' },
+  { title: '记录与趋势', desc: '查看历史和完成率', url: 'pages/HistoryPage' },
   { title: '健康指标', desc: '记录血压、血糖和心率', url: 'pages/HealthMetricPage' },
-  { title: '家属协助', desc: '绑定监护人并同步异常提醒', url: 'pages/FamilyAssistPage' },
   { title: '我的设置', desc: '字号和提醒设置', url: 'pages/SettingsPage' }
 ];
 
@@ -353,20 +276,119 @@ export function setSession(role: UserRole): void {
   currentSession.userId = role === 'elder' ? 1 : 2;
 }
 
+export function findUserByPhone(phone: string): UserProfile | undefined {
+  for (let index = 0; index < users.length; index++) {
+    if (users[index].phone === phone) {
+      return users[index];
+    }
+  }
+  return undefined;
+}
+
+export function setSessionForUser(userId: number): void {
+  for (let index = 0; index < users.length; index++) {
+    if (users[index].id === userId) {
+      currentSession.userId = users[index].id;
+      currentSession.role = users[index].role;
+      return;
+    }
+  }
+}
+
+function nextUserId(): number {
+  let nextId: number = 1;
+  for (let index = 0; index < users.length; index++) {
+    if (users[index].id >= nextId) {
+      nextId = users[index].id + 1;
+    }
+  }
+  return nextId;
+}
+
+function nextElderId(): number {
+  let nextId: number = 1;
+  for (let index = 0; index < elderProfiles.length; index++) {
+    if (elderProfiles[index].id >= nextId) {
+      nextId = elderProfiles[index].id + 1;
+    }
+  }
+  return nextId;
+}
+
+function createBindCode(elderId: number): string {
+  const numberText: string = (2026 + elderId).toString();
+  return 'AX' + numberText;
+}
+
+export function createUserAccount(phone: string, role: UserRole): UserProfile {
+  const existingUser: UserProfile | undefined = findUserByPhone(phone);
+  if (existingUser !== undefined) {
+    return existingUser;
+  }
+  const userId: number = nextUserId();
+  const user: UserProfile = {
+    id: userId,
+    name: role === 'elder' ? '新老人' : '家属用户',
+    phone: phone,
+    role: role,
+    relation: role === 'guardian' ? '家属' : undefined
+  };
+  users.push(user);
+  if (role === 'elder') {
+    const elderId: number = nextElderId();
+    const bindCode: string = createBindCode(elderId);
+    user.elderId = elderId;
+    elderProfiles.push({
+      id: elderId,
+      name: user.name,
+      relation: '本人',
+      bindCode: bindCode,
+      contact: '暂未绑定家属',
+      status: '平稳'
+    });
+    elderPreferences.push({
+      elderId: elderId,
+      largeText: false,
+      strongReminder: true
+    });
+    selectedElderId = elderId;
+  }
+  return user;
+}
+
+export function ensureFamilyBinding(elderId: number, guardianId: number, code: string): void {
+  for (let index = 0; index < familyBindings.length; index++) {
+    if (familyBindings[index].elderId === elderId && familyBindings[index].guardianId === guardianId) {
+      return;
+    }
+  }
+  familyBindings.push({
+    elderId: elderId,
+    guardianId: guardianId,
+    code: code,
+    relation: '家属'
+  });
+}
+
 export function getCurrentUser(): UserProfile {
-  return currentSession.role === 'guardian' ? users[1] : users[0];
+  for (let index = 0; index < users.length; index++) {
+    if (users[index].id === currentSession.userId) {
+      return users[index];
+    }
+  }
+  return users[0];
 }
 
 export function getWatchedElderId(): number {
-  return currentSession.role === 'guardian' ? selectedElderId : 1;
+  if (currentSession.role === 'guardian') {
+    return selectedElderId;
+  }
+  const user: UserProfile = getCurrentUser();
+  return user.elderId === undefined ? 1 : user.elderId;
 }
 
 export function selectElder(id: number): void {
   selectedElderId = id;
-}
-
-export function getSelectedElderId(): number {
-  return selectedElderId;
 }
 
 export function getCurrentElder(): ElderProfile {
@@ -378,8 +400,28 @@ export function getCurrentElder(): ElderProfile {
   return elderProfiles[0];
 }
 
-export function getGuardianElders(): ElderProfile[] {
-  return elderProfiles;
+export function getCurrentElderPreference(): ElderPreference {
+  const elderId: number = getWatchedElderId();
+  for (let index = 0; index < elderPreferences.length; index++) {
+    if (elderPreferences[index].elderId === elderId) {
+      return elderPreferences[index];
+    }
+  }
+  const preference: ElderPreference = {
+    elderId: elderId,
+    largeText: false,
+    strongReminder: true
+  };
+  elderPreferences.push(preference);
+  return preference;
+}
+
+export function setLargeTextMode(value: boolean): void {
+  getCurrentElderPreference().largeText = value;
+}
+
+export function setStrongReminderMode(value: boolean): void {
+  getCurrentElderPreference().strongReminder = value;
 }
 
 export function unlinkCurrentElder(): string {
@@ -423,6 +465,159 @@ export function getElderPlans(): MedicationPlan[] {
   return result;
 }
 
+export function addMedicationPlanForElder(medicineName: string, times: string[], dosage: string, mealTime: string): MedicationPlan {
+  let nextId: number = 1;
+  for (let index = 0; index < plans.length; index++) {
+    if (plans[index].id >= nextId) {
+      nextId = plans[index].id + 1;
+    }
+  }
+  const elderId: number = getWatchedElderId();
+  const plan: MedicationPlan = {
+    id: nextId,
+    elderId: elderId,
+    medicineName: medicineName,
+    times: times,
+    dosage: dosage,
+    mealTime: mealTime,
+    enabled: true
+  };
+  plans.push(plan);
+  syncTodayRecordsForPlan(plan);
+  sortTodayRecords();
+  return plan;
+}
+
+export function saveMedicationPlanForElder(medicineName: string, times: string[], dosage: string, mealTime: string): MedicationPlan {
+  if (planFormMode === 'edit') {
+    return updateSelectedMedicationPlan(medicineName, times, dosage, mealTime);
+  }
+  return addMedicationPlanForElder(medicineName, times, dosage, mealTime);
+}
+
+export function updateSelectedMedicationPlan(medicineName: string, times: string[], dosage: string, mealTime: string): MedicationPlan {
+  const plan: MedicationPlan = getSelectedPlan();
+  const oldPlan: MedicationPlan = {
+    id: plan.id,
+    elderId: plan.elderId,
+    medicineName: plan.medicineName,
+    times: plan.times,
+    dosage: plan.dosage,
+    mealTime: plan.mealTime,
+    enabled: plan.enabled
+  };
+  removeUnfinishedTodayRecordsForPlan(oldPlan);
+  plan.medicineName = medicineName;
+  plan.times = times;
+  plan.dosage = dosage;
+  plan.mealTime = mealTime;
+  if (plan.enabled) {
+    syncTodayRecordsForPlan(plan);
+    sortTodayRecords();
+  }
+  return plan;
+}
+
+export function startCreatePlan(): void {
+  planFormMode = 'create';
+}
+
+export function startCreatePlanForMedicine(medicineName: string): void {
+  selectedMedicineName = medicineName;
+  planFormMode = 'create';
+}
+
+export function startEditSelectedPlan(): void {
+  planFormMode = 'edit';
+}
+
+export function isEditingMedicationPlan(): boolean {
+  return planFormMode === 'edit';
+}
+
+export function getPlanFormTitle(): string {
+  return planFormMode === 'edit' ? '修改用药计划' : '新增用药计划';
+}
+
+export function getPlanFormMedicine(): string {
+  return planFormMode === 'edit' ? getSelectedPlan().medicineName : selectedMedicineName;
+}
+
+export function getPlanFormTime(index: number): string {
+  if (planFormMode !== 'edit') {
+    if (index === 0) {
+      return '08:00';
+    }
+    if (index === 1) {
+      return '12:30';
+    }
+    return '18:30';
+  }
+  const plan: MedicationPlan = getSelectedPlan();
+  return plan.times.length > index ? plan.times[index] : '';
+}
+
+export function getPlanFormDosage(): string {
+  return planFormMode === 'edit' ? getSelectedPlan().dosage : '1片';
+}
+
+export function getPlanFormMealTime(): string {
+  return planFormMode === 'edit' ? getSelectedPlan().mealTime : '饭后';
+}
+
+function syncTodayRecordsForPlan(plan: MedicationPlan): void {
+  for (let timeIndex = 0; timeIndex < plan.times.length; timeIndex++) {
+    let exists: boolean = false;
+    for (let recordIndex = 0; recordIndex < todayRecords.length; recordIndex++) {
+      if (todayRecords[recordIndex].elderId === plan.elderId &&
+        todayRecords[recordIndex].medicineName === plan.medicineName &&
+        todayRecords[recordIndex].time === plan.times[timeIndex]) {
+        exists = true;
+        break;
+      }
+    }
+    if (!exists) {
+      todayRecords.push({
+        elderId: plan.elderId,
+        time: plan.times[timeIndex],
+        medicineName: plan.medicineName,
+        status: '待服用',
+        source: '系统未响应'
+      });
+    }
+  }
+}
+
+function removeUnfinishedTodayRecordsForPlan(plan: MedicationPlan): void {
+  for (let index = todayRecords.length - 1; index >= 0; index--) {
+    if (todayRecords[index].elderId === plan.elderId &&
+      todayRecords[index].medicineName === plan.medicineName &&
+      todayRecords[index].status !== '已服用') {
+      for (let timeIndex = 0; timeIndex < plan.times.length; timeIndex++) {
+        if (todayRecords[index].time === plan.times[timeIndex]) {
+          todayRecords.splice(index, 1);
+          break;
+        }
+      }
+    }
+  }
+}
+
+function sortTodayRecords(): void {
+  todayRecords.sort((left: MedicationRecord, right: MedicationRecord): number => {
+    if (left.elderId !== right.elderId) {
+      return left.elderId - right.elderId;
+    }
+    if (left.time < right.time) {
+      return -1;
+    }
+    if (left.time > right.time) {
+      return 1;
+    }
+    return 0;
+  });
+}
+
 export function getElderTodayRecords(): MedicationRecord[] {
   const result: MedicationRecord[] = [];
   for (let index = 0; index < todayRecords.length; index++) {
@@ -456,21 +651,20 @@ export function getElderHealthMetrics(): HealthMetric[] {
 export function getElderHealthAlerts(): HealthAlert[] {
   const result: HealthAlert[] = [];
   for (let index = 0; index < healthAlerts.length; index++) {
-    if (healthAlerts[index].elderId === getWatchedElderId()) {
+    if (healthAlerts[index].elderId === getWatchedElderId() && healthAlerts[index].resolved !== true) {
       result.push(healthAlerts[index]);
     }
   }
   return result;
 }
 
-export function getElderCareTodos(): CareTodo[] {
-  const result: CareTodo[] = [];
-  for (let index = 0; index < careTodos.length; index++) {
-    if (careTodos[index].elderId === getWatchedElderId()) {
-      result.push(careTodos[index]);
+export function markRefillArranged(medicineName: string): void {
+  for (let index = 0; index < medicines.length; index++) {
+    if (medicines[index].elderId === getWatchedElderId() && medicines[index].name === medicineName) {
+      medicines[index].refillArranged = true;
+      return;
     }
   }
-  return result;
 }
 
 export function getElderCareActionRecords(): CareActionRecord[] {
@@ -493,28 +687,105 @@ export function addCareActionRecord(title: string, desc: string, source: string)
   });
 }
 
-export function addCareTodo(title: string, desc: string, level: string, action: string, url: string): void {
-  for (let index = 0; index < careTodos.length; index++) {
-    if (careTodos[index].elderId === getWatchedElderId() && careTodos[index].title === title) {
-      careTodos[index].desc = desc;
-      careTodos[index].level = level;
-      careTodos[index].action = action;
-      careTodos[index].url = url;
+export function isNotificationEnabled(title: string): boolean {
+  for (let index = 0; index < notificationPreferences.length; index++) {
+    if (notificationPreferences[index].title === title) {
+      return notificationPreferences[index].enabled;
+    }
+  }
+  return false;
+}
+
+export function setNotificationPreference(title: string, enabled: boolean): void {
+  for (let index = 0; index < notificationPreferences.length; index++) {
+    if (notificationPreferences[index].title === title) {
+      notificationPreferences[index].enabled = enabled;
+      addCareActionRecord('通知设置', title + (enabled ? '已开启。' : '已关闭。'), '看护设置');
       return;
     }
   }
-  careTodos.unshift({
+}
+
+function addHealthMetricRecord(type: HealthMetricType, name: string, value: string, numericValue: number, unit: string, normal: boolean, alertTitle: string): void {
+  healthMetrics.unshift({
     elderId: getWatchedElderId(),
-    title: title,
-    desc: desc,
-    level: level,
-    action: action,
-    url: url
+    type: type,
+    name: name,
+    value: value,
+    numericValue: numericValue,
+    unit: unit,
+    time: '刚刚',
+    normal: normal
   });
+  if (!normal) {
+    const notifyEnabled: boolean = isNotificationEnabled('健康异常通知');
+    healthAlerts.unshift({
+      elderId: getWatchedElderId(),
+      type: type,
+      title: alertTitle,
+      value: value,
+      time: '刚刚',
+      notified: notifyEnabled
+    });
+    addCareActionRecord(notifyEnabled ? '健康异常通知' : '健康异常记录', name + '记录为' + value + (notifyEnabled ? '，已通知看护人。' : '，通知已关闭，仅保留记录。'), '健康记录');
+  }
+}
+
+export function recordHeartRateMetric(rateText: string): boolean {
+  const rate: number = Number(rateText);
+  const normal: boolean = rate >= 50 && rate <= 110;
+  addHealthMetricRecord('heartRate', '心率', rateText + ' 次/分', rate, '次/分', normal, rate > 110 ? '心率偏高' : '心率偏低');
+  return normal;
+}
+
+export function recordBloodPressureMetric(pressureText: string): boolean {
+  const parts: string[] = pressureText.split('/');
+  const systolic: number = parts.length > 0 ? Number(parts[0]) : 0;
+  const diastolic: number = parts.length > 1 ? Number(parts[1]) : 0;
+  const normal: boolean = systolic >= 90 && systolic <= 139 && diastolic >= 60 && diastolic <= 89;
+  const alertTitle: string = systolic >= 140 || diastolic >= 90 ? '血压偏高' : '血压偏低';
+  addHealthMetricRecord('bloodPressure', '血压', pressureText + ' mmHg', systolic, 'mmHg', normal, alertTitle);
+  return normal;
+}
+
+export function recordBloodSugarMetric(sugarText: string): boolean {
+  const sugar: number = Number(sugarText);
+  const normal: boolean = sugar >= 3.9 && sugar <= 6.1;
+  addHealthMetricRecord('bloodSugar', '空腹血糖', sugarText + ' mmol/L', sugar, 'mmol/L', normal, sugar > 6.1 ? '血糖偏高' : '血糖偏低');
+  return normal;
 }
 
 export function addRefillTodo(medicineName: string): void {
-  addCareTodo('补药任务跟进', medicineName + '已安排补充，请完成购买后回到记录页确认。', '待处理', '查看库存', 'pages/InventoryPage');
+  markRefillArranged(medicineName);
+}
+
+export function confirmFirstPendingRecordByGuardian(): MedicationRecord | undefined {
+  for (let index = 0; index < todayRecords.length; index++) {
+    if (todayRecords[index].elderId === getWatchedElderId() && todayRecords[index].status !== '已服用') {
+      decreaseMedicineStockAfterDose(todayRecords[index].medicineName);
+      todayRecords[index].status = '已服用';
+      todayRecords[index].source = '家属补记';
+      historyRecords.unshift({
+        elderId: todayRecords[index].elderId,
+        time: '今天 ' + todayRecords[index].time,
+        medicineName: todayRecords[index].medicineName,
+        status: '已服用',
+        source: '家属补记'
+      });
+      return todayRecords[index];
+    }
+  }
+  return undefined;
+}
+
+export function markHealthRetestRequested(): void {
+  for (let index = 0; index < healthAlerts.length; index++) {
+    if (healthAlerts[index].elderId === getWatchedElderId()) {
+      healthAlerts[index].retestRequested = true;
+      healthAlerts[index].notified = true;
+      return;
+    }
+  }
 }
 
 export function selectMedicine(name: string): void {
@@ -523,6 +794,32 @@ export function selectMedicine(name: string): void {
 
 export function selectPlan(id: number): void {
   selectedPlanId = id;
+}
+
+export function deleteSelectedPlan(): string {
+  const plan: MedicationPlan = getSelectedPlan();
+  const removedName: string = plan.medicineName;
+  removeUnfinishedTodayRecordsForPlan(plan);
+  for (let index = 0; index < plans.length; index++) {
+    if (plans[index].id === plan.id) {
+      plans.splice(index, 1);
+      break;
+    }
+  }
+  const currentPlans: MedicationPlan[] = getElderPlans();
+  selectedPlanId = currentPlans.length > 0 ? currentPlans[0].id : 0;
+  return removedName;
+}
+
+export function setSelectedPlanEnabled(enabled: boolean): void {
+  const plan: MedicationPlan = getSelectedPlan();
+  plan.enabled = enabled;
+  if (enabled) {
+    syncTodayRecordsForPlan(plan);
+    sortTodayRecords();
+  } else {
+    removeUnfinishedTodayRecordsForPlan(plan);
+  }
 }
 
 export function selectReminder(record: MedicationRecord): void {
@@ -556,6 +853,43 @@ export function getSelectedReminder(): MedicationRecord {
   }
   const currentRecords: MedicationRecord[] = getElderTodayRecords();
   return currentRecords.length > 0 ? currentRecords[0] : todayRecords[0];
+}
+
+export function updateReminderStatus(record: MedicationRecord, status: string, source: RecordSource): void {
+  if (record.status === status && record.source === source) {
+    return;
+  }
+  const wasDone: boolean = record.status === '已服用';
+  if (!wasDone && status === '已服用') {
+    decreaseMedicineStockAfterDose(record.medicineName);
+  } else if (wasDone && status !== '已服用') {
+    restoreMedicineStockAfterDoseCorrection(record.medicineName);
+  }
+  record.status = status;
+  record.source = source;
+  historyRecords.unshift({
+    elderId: record.elderId,
+    time: '今天 ' + record.time,
+    medicineName: record.medicineName,
+    status: status,
+    source: source
+  });
+  if (status === '漏服') {
+    if (isNotificationEnabled('漏服通知')) {
+      addCareActionRecord('漏服通知', record.time + ' ' + record.medicineName + '已记录漏服，已通知看护人。', source);
+    } else {
+      addCareActionRecord('漏服记录', record.time + ' ' + record.medicineName + '已记录漏服，漏服通知已关闭。', source);
+    }
+  }
+}
+
+export function postponeMedicationReminder(record: MedicationRecord, source: RecordSource): void {
+  if (record.status === '已服用') {
+    return;
+  }
+  record.status = '稍后提醒';
+  record.source = source;
+  addCareActionRecord('稍后提醒', record.time + ' ' + record.medicineName + '已设置稍后提醒，等待后续确认。', source);
 }
 
 export function getMedicinePlanText(name: string): string {
@@ -603,9 +937,25 @@ export function isMedicinePhotoUploaded(name: string): boolean {
   return false;
 }
 
-export function addMedicineForElder(name: string, spec: string, dosage: string, stock: number, note: string, photoUri: string, photoLabel: string, photoColor: string, photoUploaded: boolean): void {
-  const nextId: number = medicines.length + 1;
+export function addMedicineForElder(name: string, spec: string, dosage: string, stock: number, note: string, photoUri: string, photoLabel: string, photoColor: string, photoUploaded: boolean): boolean {
   const savedName: string = name === '' ? '未命名药品' : name;
+  for (let index = 0; index < medicines.length; index++) {
+    if (medicines[index].elderId === getWatchedElderId() && medicines[index].name === savedName) {
+      medicines[index].spec = spec === '' ? medicines[index].spec : spec;
+      medicines[index].dosage = dosage === '' ? medicines[index].dosage : dosage;
+      medicines[index].stock = stock;
+      medicines[index].note = note === '' ? medicines[index].note : note;
+      if (photoUploaded || photoUri !== '') {
+        medicines[index].photoUri = photoUri;
+        medicines[index].photoLabel = photoLabel === '' ? medicines[index].photoLabel : photoLabel;
+        medicines[index].photoColor = photoColor === '' ? medicines[index].photoColor : photoColor;
+        medicines[index].photoUploaded = photoUploaded;
+      }
+      medicines[index].refillArranged = stock > medicines[index].threshold ? false : medicines[index].refillArranged;
+      return false;
+    }
+  }
+  const nextId: number = medicines.length + 1;
   medicines.push({
     id: nextId,
     elderId: getWatchedElderId(),
@@ -620,11 +970,64 @@ export function addMedicineForElder(name: string, spec: string, dosage: string, 
     photoColor: photoColor === '' ? '#E7F5EF' : photoColor,
     photoUploaded: photoUploaded
   });
+  return true;
+}
+
+export function updateMedicineStock(name: string, stock: number): StockUpdateResult {
+  for (let index = 0; index < medicines.length; index++) {
+    if (medicines[index].elderId === getWatchedElderId() && medicines[index].name === name) {
+      const wasArranged: boolean = medicines[index].refillArranged === true;
+      medicines[index].stock = stock;
+      const lowStock: boolean = stock <= medicines[index].threshold;
+      if (!lowStock) {
+        medicines[index].refillArranged = false;
+      }
+      addCareActionRecord(lowStock ? '库存仍偏低' : '库存已更新', name + '库存更新为 ' + stock.toString() + '。', '药品管理');
+      return {
+        found: true,
+        lowStock: lowStock,
+        refillCleared: wasArranged && !lowStock
+      };
+    }
+  }
+  return {
+    found: false,
+    lowStock: false,
+    refillCleared: false
+  };
+}
+
+function decreaseMedicineStockAfterDose(medicineName: string): void {
+  for (let index = 0; index < medicines.length; index++) {
+    if (medicines[index].elderId === getWatchedElderId() && medicines[index].name === medicineName) {
+      const previousStock: number = medicines[index].stock;
+      medicines[index].stock = medicines[index].stock > 0 ? medicines[index].stock - 1 : 0;
+      if (previousStock > medicines[index].threshold && medicines[index].stock <= medicines[index].threshold) {
+        medicines[index].refillArranged = false;
+        if (isNotificationEnabled('低库存通知')) {
+          addCareActionRecord('低库存通知', medicineName + '库存已低于提醒阈值，请安排补药。', '服药记录');
+        } else {
+          addCareActionRecord('低库存记录', medicineName + '库存已低于提醒阈值，低库存通知已关闭。', '服药记录');
+        }
+      }
+      return;
+    }
+  }
+}
+
+function restoreMedicineStockAfterDoseCorrection(medicineName: string): void {
+  for (let index = 0; index < medicines.length; index++) {
+    if (medicines[index].elderId === getWatchedElderId() && medicines[index].name === medicineName) {
+      medicines[index].stock++;
+      return;
+    }
+  }
 }
 
 export function markFirstPendingRecordDone(): void {
   for (let index = 0; index < todayRecords.length; index++) {
-    if (todayRecords[index].elderId === getWatchedElderId() && todayRecords[index].status === '待服用') {
+    if (todayRecords[index].elderId === getWatchedElderId() && todayRecords[index].status !== '已服用') {
+      decreaseMedicineStockAfterDose(todayRecords[index].medicineName);
       todayRecords[index].status = '已服用';
       todayRecords[index].source = '老人确认';
       historyRecords.unshift({
@@ -660,4 +1063,26 @@ export function connectHealthDevice(): void {
     time: '刚刚',
     notified: true
   });
+}
+
+export function syncRetestHeartRate(): void {
+  deviceStatus.connected = true;
+  deviceStatus.lastSync = '刚刚同步';
+  healthMetrics.unshift({
+    elderId: getWatchedElderId(),
+    type: 'heartRate',
+    name: '心率',
+    value: '96 次/分',
+    numericValue: 96,
+    unit: '次/分',
+    time: '刚刚',
+    normal: true
+  });
+  for (let index = 0; index < healthAlerts.length; index++) {
+    if (healthAlerts[index].elderId === getWatchedElderId() && healthAlerts[index].type === 'heartRate') {
+      healthAlerts[index].retestRequested = true;
+      healthAlerts[index].resolved = true;
+      return;
+    }
+  }
 }

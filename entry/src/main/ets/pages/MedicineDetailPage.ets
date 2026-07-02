@@ -1,11 +1,43 @@
-import { router } from '@kit.ArkUI';
-import { getMedicinePhotoColor, getMedicinePhotoLabel, getMedicinePhotoUri, getMedicinePlanText, getSelectedMedicine, isMedicinePhotoUploaded, Medicine } from '../models/AppData';
+import { router, promptAction } from '@kit.ArkUI';
+import { getMedicinePhotoColor, getMedicinePhotoLabel, getMedicinePhotoUri, getMedicinePlanText, getSelectedMedicine, isMedicinePhotoUploaded, Medicine, StockUpdateResult, updateMedicineStock } from '../models/AppData';
 
 @Entry
 @Component
 struct MedicineDetailPage {
+  @State stockInput: string = '';
+  @State refreshToken: number = 0;
+
   private currentMedicine(): Medicine {
+    this.refreshToken;
     return getSelectedMedicine();
+  }
+
+  private saveStock(): void {
+    const nextStock: number = Number(this.stockInput);
+    if (!this.isIntegerText(this.stockInput) || nextStock < 0) {
+      promptAction.showToast({ message: '请输入正确库存数量' });
+      return;
+    }
+    const result: StockUpdateResult = updateMedicineStock(this.currentMedicine().name, nextStock);
+    this.refreshToken++;
+    if (!result.found) {
+      promptAction.showToast({ message: '未找到药品' });
+      return;
+    }
+    promptAction.showToast({ message: result.lowStock ? '库存仍低于阈值，请安排补药' : result.refillCleared ? '库存已补足，补药状态已清除' : '库存已更新' });
+  }
+
+  private isIntegerText(value: string): boolean {
+    if (value === '') {
+      return false;
+    }
+    for (let index = 0; index < value.length; index++) {
+      const char: string = value.charAt(index);
+      if (char < '0' || char > '9') {
+        return false;
+      }
+    }
+    return true;
   }
 
   build() {
@@ -29,6 +61,24 @@ struct MedicineDetailPage {
           Text('当前库存：' + this.currentMedicine().stock.toString() + '，低于 ' + this.currentMedicine().threshold.toString() + ' 时提醒补充。')
             .fontSize(16)
             .lineHeight(24)
+          Row({ space: 10 }) {
+            TextInput({ placeholder: '输入新库存', text: this.stockInput })
+              .layoutWeight(1)
+              .height(46)
+              .fontSize(16)
+              .borderRadius(14)
+              .backgroundColor('#F6F8FB')
+              .onChange((value: string) => {
+                this.stockInput = value;
+              })
+            Button('更新库存')
+              .height(46)
+              .fontSize(15)
+              .borderRadius(14)
+              .backgroundColor('#0B7A5B')
+              .onClick(() => this.saveStock())
+          }
+          .width('100%')
           Divider()
           Text('用药说明').fontSize(20).fontWeight(FontWeight.Bold)
           Text(this.currentMedicine().note)

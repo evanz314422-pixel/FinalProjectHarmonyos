@@ -1,10 +1,26 @@
 import { router, promptAction } from '@kit.ArkUI';
+import {
+  addCareActionRecord,
+  getCurrentElder,
+  getCurrentElderPreference,
+  setLargeTextMode,
+  setStrongReminderMode
+} from '../models/AppData';
 
 @Entry
 @Component
 struct SettingsPage {
-  @State bigTextMode: boolean = false;
-  @State strongReminder: boolean = true;
+  @State refreshToken: number = 0;
+
+  private bigTextMode(): boolean {
+    this.refreshToken;
+    return getCurrentElderPreference().largeText;
+  }
+
+  private strongReminder(): boolean {
+    this.refreshToken;
+    return getCurrentElderPreference().strongReminder;
+  }
 
   build() {
     Scroll() {
@@ -37,10 +53,12 @@ struct SettingsPage {
           .height(52)
           .fontSize(18)
           .borderRadius(18)
-          .fontColor(this.bigTextMode ? '#52635F' : '#FFFFFF')
-          .backgroundColor(this.bigTextMode ? '#F2F4F7' : '#0B7A5B')
+          .fontColor(this.bigTextMode() ? '#52635F' : '#FFFFFF')
+          .backgroundColor(this.bigTextMode() ? '#F2F4F7' : '#0B7A5B')
           .onClick(() => {
-            this.bigTextMode = false;
+            setLargeTextMode(false);
+            this.refreshToken++;
+            promptAction.showToast({ message: '已切换为普通字' });
           })
         Button('大字')
           .layoutWeight(1)
@@ -48,10 +66,12 @@ struct SettingsPage {
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
           .borderRadius(18)
-          .fontColor(this.bigTextMode ? '#FFFFFF' : '#0B7A5B')
-          .backgroundColor(this.bigTextMode ? '#0B7A5B' : '#E7F5EF')
+          .fontColor(this.bigTextMode() ? '#FFFFFF' : '#0B7A5B')
+          .backgroundColor(this.bigTextMode() ? '#0B7A5B' : '#E7F5EF')
           .onClick(() => {
-            this.bigTextMode = true;
+            setLargeTextMode(true);
+            this.refreshToken++;
+            promptAction.showToast({ message: '已打开大字模式' });
           })
       }
       .width('100%')
@@ -69,10 +89,11 @@ struct SettingsPage {
         .fontSize(24)
         .fontWeight(FontWeight.Bold)
         .fontColor('#14213D')
-      this.SwitchRow('强提醒', '容易忘记吃药时打开', this.strongReminder, (value: boolean) => {
-        this.strongReminder = value;
+      this.SwitchRow('强提醒', '容易忘记吃药时打开', this.strongReminder(), (value: boolean) => {
+        setStrongReminderMode(value);
+        this.refreshToken++;
       })
-      Text(this.strongReminder ? '已打开：提醒会更明显。' : '已关闭：只显示普通提醒。')
+      Text(this.strongReminder() ? '已打开：提醒会更明显。' : '已关闭：只显示普通提醒。')
         .fontSize(17)
         .lineHeight(25)
         .fontColor('#667085')
@@ -105,7 +126,10 @@ struct SettingsPage {
         .fontWeight(FontWeight.Bold)
         .borderRadius(18)
         .backgroundColor('#0B7A5B')
-        .onClick(() => promptAction.showToast({ message: '已提醒家属' }))
+        .onClick(() => {
+          addCareActionRecord('老人求助', getCurrentElder().name + '在设置页请求家属协助。', '老人端');
+          promptAction.showToast({ message: '已提醒家属' });
+        })
     }
     .width('100%')
     .padding(18)
