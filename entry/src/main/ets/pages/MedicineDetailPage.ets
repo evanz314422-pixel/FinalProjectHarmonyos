@@ -1,33 +1,95 @@
-import { router } from '@kit.ArkUI';
-import { getMedicinePhotoColor, getMedicinePhotoLabel, getMedicinePhotoUri, isMedicinePhotoUploaded } from '../models/AppData';
+import { router, promptAction } from '@kit.ArkUI';
+import { getMedicinePhotoColor, getMedicinePhotoLabel, getMedicinePhotoUri, getMedicinePlanText, getSelectedMedicine, isMedicinePhotoUploaded, Medicine, StockUpdateResult, updateMedicineStock } from '../models/AppData';
 
 @Entry
 @Component
 struct MedicineDetailPage {
+  @State stockInput: string = '';
+  @State refreshToken: number = 0;
+
+  private currentMedicine(): Medicine {
+    this.refreshToken;
+    return getSelectedMedicine();
+  }
+
+  private saveStock(): void {
+    const nextStock: number = Number(this.stockInput);
+    if (!this.isIntegerText(this.stockInput) || nextStock < 0) {
+      promptAction.showToast({ message: '请输入正确库存数量' });
+      return;
+    }
+    const result: StockUpdateResult = updateMedicineStock(this.currentMedicine().name, nextStock);
+    this.refreshToken++;
+    if (!result.found) {
+      promptAction.showToast({ message: '未找到药品' });
+      return;
+    }
+    promptAction.showToast({ message: result.lowStock ? '库存仍低于阈值，请安排补药' : result.refillCleared ? '库存已补足，补药状态已清除' : '库存已更新' });
+  }
+
+  private isIntegerText(value: string): boolean {
+    if (value === '') {
+      return false;
+    }
+    for (let index = 0; index < value.length; index++) {
+      const char: string = value.charAt(index);
+      if (char < '0' || char > '9') {
+        return false;
+      }
+    }
+    return true;
+  }
+
   build() {
     Scroll() {
       Column({ space: 16 }) {
         this.Header('药品详情')
         Column({ space: 12 }) {
           Row({ space: 14 }) {
-            this.MedicinePhoto('二甲双胍片', 82)
+            this.MedicinePhoto(this.currentMedicine().name, 82)
             Column({ space: 6 }) {
-              Text('二甲双胍片').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#14213D')
+              Text(this.currentMedicine().name).fontSize(28).fontWeight(FontWeight.Bold).fontColor('#14213D')
               Text('老人端会显示此药品图片，方便看图认药。').fontSize(14).fontColor('#667085')
             }
             .layoutWeight(1)
             .alignItems(HorizontalAlign.Start)
           }
           .width('100%')
-          Text('规格：0.5g x 30片').fontSize(16)
-          Text('常用剂量：每次 1 片，每日 3 次').fontSize(16)
+          Text('规格：' + this.currentMedicine().spec).fontSize(16)
+          Text('默认剂量：' + this.currentMedicine().dosage).fontSize(16)
+          Text('用药计划：' + getMedicinePlanText(this.currentMedicine().name)).fontSize(16).lineHeight(24)
+          Text('当前库存：' + this.currentMedicine().stock.toString() + '，低于 ' + this.currentMedicine().threshold.toString() + ' 时提醒补充。')
+            .fontSize(16)
+            .lineHeight(24)
+          Row({ space: 10 }) {
+            TextInput({ placeholder: '输入新库存', text: this.stockInput })
+              .layoutWeight(1)
+              .height(46)
+              .fontSize(16)
+              .borderRadius(14)
+              .backgroundColor('#F6F8FB')
+              .onChange((value: string) => {
+                this.stockInput = value;
+              })
+            Button('更新库存')
+              .height(46)
+              .fontSize(15)
+              .borderRadius(14)
+              .backgroundColor('#0B7A5B')
+              .onClick(() => this.saveStock())
+          }
+          .width('100%')
           Divider()
           Text('用药说明').fontSize(20).fontWeight(FontWeight.Bold)
-          Text('适用于 2 型糖尿病的血糖控制。建议餐后服用，减少胃肠道不适。服药期间需规律监测血糖。')
+          Text(this.currentMedicine().note)
             .fontSize(16)
             .lineHeight(24)
           Text('注意事项').fontSize(20).fontWeight(FontWeight.Bold)
-          Text('若出现明显乏力、出冷汗、心慌等低血糖表现，应及时补充糖分并联系医生。')
+          Text('药名、剂量和禁忌应以医生处方为准。如出现不适，请联系家属或医生确认。')
+            .fontSize(16)
+            .lineHeight(24)
+          Text('数据来源').fontSize(20).fontWeight(FontWeight.Bold)
+          Text('药品信息来自本人或家属录入；照片用于辅助辨认，不能替代医生处方。')
             .fontSize(16)
             .lineHeight(24)
         }

@@ -1,9 +1,14 @@
 import { router, promptAction } from '@kit.ArkUI';
+import { getSelectedReminder, MedicationRecord, postponeMedicationReminder, updateReminderStatus } from '../models/AppData';
 
 @Entry
 @Component
 struct CheckInPage {
   @State status: string = '待选择';
+
+  private currentRecord(): MedicationRecord {
+    return getSelectedReminder();
+  }
 
   build() {
     Scroll() {
@@ -13,14 +18,10 @@ struct CheckInPage {
           Text('当前需要补记')
             .fontSize(18)
             .fontColor('#667085')
-          Text('二甲双胍片  1片')
+          Text(this.currentRecord().medicineName)
             .fontSize(30)
             .fontWeight(FontWeight.Bold)
             .fontColor('#14213D')
-          Text('如果刚刚已经在首页确认过，就不用重复操作。')
-            .fontSize(16)
-            .lineHeight(24)
-            .fontColor('#52635F')
           Text('状态：' + this.status)
             .fontSize(19)
             .fontWeight(FontWeight.Bold)
@@ -41,6 +42,7 @@ struct CheckInPage {
           .backgroundColor('#0E7C66')
           .onClick(() => {
             this.status = '已服用';
+            updateReminderStatus(this.currentRecord(), '已服用', '家属补记');
             promptAction.showToast({ message: '已补记为已服用' });
           })
         Button('10 分钟后提醒')
@@ -52,7 +54,8 @@ struct CheckInPage {
           .backgroundColor('#F79009')
           .onClick(() => {
             this.status = '稍后提醒';
-            promptAction.showToast({ message: '10 分钟后再次提醒（模拟）' });
+            postponeMedicationReminder(this.currentRecord(), '家属补记');
+            promptAction.showToast({ message: '已设置10分钟后提醒' });
           })
         Button('今天漏服了')
           .width('100%')
@@ -63,6 +66,7 @@ struct CheckInPage {
           .backgroundColor('#B42318')
           .onClick(() => {
             this.status = '漏服';
+            updateReminderStatus(this.currentRecord(), '漏服', '家属补记');
             promptAction.showToast({ message: '已记录漏服，建议联系家属确认' });
           })
       }

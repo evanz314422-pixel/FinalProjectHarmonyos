@@ -1,10 +1,16 @@
 import { router, promptAction } from '@kit.ArkUI';
 import {
-  connectMockDevice,
+  connectHealthDevice,
+  syncRetestHeartRate,
+  addCareActionRecord,
   deviceStatus,
+  getCurrentElder,
+  getElderHealthAlerts,
+  getElderHealthMetrics,
   HealthMetric,
-  healthAlerts,
-  healthMetrics
+  recordBloodPressureMetric,
+  recordBloodSugarMetric,
+  recordHeartRateMetric
 } from '../models/AppData';
 
 @Entry
@@ -15,29 +21,54 @@ struct HealthMetricPage {
   @State bloodSugar: string = '6.2';
   @State refreshToken: number = 0;
 
+  private retestHeartRate(): void {
+    syncRetestHeartRate();
+    addCareActionRecord('完成复测', getCurrentElder().name + '已完成心率复测，最新心率 96 次/分。', '设备同步');
+    this.refreshToken++;
+    promptAction.showToast({ message: '已同步复测心率' });
+  }
+
+  private isIntegerText(value: string): boolean {
+    if (value === '') {
+      return false;
+    }
+    for (let index = 0; index < value.length; index++) {
+      const char: string = value.charAt(index);
+      if (char < '0' || char > '9') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private isDecimalText(value: string): boolean {
+    if (value === '') {
+      return false;
+    }
+    let dotCount: number = 0;
+    for (let index = 0; index < value.length; index++) {
+      const char: string = value.charAt(index);
+      if (char === '.') {
+        dotCount++;
+        if (dotCount > 1) {
+          return false;
+        }
+      } else if (char < '0' || char > '9') {
+        return false;
+      }
+    }
+    return value !== '.';
+  }
+
   private saveHeartRate(): void {
     const rate: number = Number(this.heartRate);
-    const isNormal: boolean = rate >= 50 && rate <= 110;
-    healthMetrics.unshift({
-      elderId: 1,
-      type: 'heartRate',
-      name: '心率',
-      value: this.heartRate + ' 次/分',
-      numericValue: rate,
-      unit: '次/分',
-      time: '刚刚',
-      normal: isNormal
-    });
+    if (!this.isIntegerText(this.heartRate) || rate <= 0) {
+      promptAction.showToast({ message: '请输入正确心率' });
+      return;
+    }
+    const isNormal: boolean = recordHeartRateMetric(this.heartRate);
     if (!isNormal) {
-      healthAlerts.unshift({
-        elderId: 1,
-        type: 'heartRate',
-        title: rate > 110 ? '心率偏高' : '心率偏低',
-        value: this.heartRate + ' 次/分',
-        time: '刚刚',
-        notified: true
-      });
-      promptAction.showToast({ message: '心率异常，已模拟提醒监护人' });
+      promptAction.showToast({ message: '心率异常，已提醒监护人' });
     } else {
       promptAction.showToast({ message: '心率记录已保存' });
     }
@@ -45,28 +76,20 @@ struct HealthMetricPage {
   }
 
   private saveRoutineMetric(): void {
-    healthMetrics.unshift({
-      elderId: 1,
-      type: 'bloodPressure',
-      name: '血压',
-      value: this.bloodPressure + ' mmHg',
-      numericValue: 0,
-      unit: 'mmHg',
-      time: '刚刚',
-      normal: true
-    });
-    healthMetrics.unshift({
-      elderId: 1,
-      type: 'bloodSugar',
-      name: '血糖',
-      value: this.bloodSugar + ' mmol/L',
-      numericValue: Number(this.bloodSugar),
-      unit: 'mmol/L',
-      time: '刚刚',
-      normal: true
-    });
+    const pressureParts: string[] = this.bloodPressure.split('/');
+    if (pressureParts.length !== 2 || !this.isIntegerText(pressureParts[0]) ||
+      !this.isIntegerText(pressureParts[1]) || Number(pressureParts[0]) <= 0 || Number(pressureParts[1]) <= 0) {
+      promptAction.showToast({ message: '请输入正确血压，例如 130/85' });
+      return;
+    }
+    if (!this.isDecimalText(this.bloodSugar) || Number(this.bloodSugar) <= 0) {
+      promptAction.showToast({ message: '请输入正确血糖' });
+      return;
+    }
+    const pressureNormal: boolean = recordBloodPressureMetric(this.bloodPressure);
+    const sugarNormal: boolean = recordBloodSugarMetric(this.bloodSugar);
     this.refreshToken++;
-    promptAction.showToast({ message: '健康指标已保存（模拟）' });
+    promptAction.showToast({ message: pressureNormal && sugarNormal ? '健康指标已保存' : '发现异常指标，已提醒监护人' });
   }
 
   build() {
@@ -76,7 +99,7 @@ struct HealthMetricPage {
         this.DeviceConnectCard()
         this.AlertCard()
         this.SectionTitle('最近指标')
-        ForEach(healthMetrics, (item: HealthMetric) => {
+        ForEach(getElderHealthMetrics(), (item: HealthMetric) => {
           this.MetricRow(item)
         }, (item: HealthMetric) => item.name + item.time + item.value + this.refreshToken.toString())
         this.HeartRateCard()
@@ -97,7 +120,7 @@ struct HealthMetricPage {
             .fontSize(22)
             .fontWeight(FontWeight.Bold)
             .fontColor('#14213D')
-          Text(deviceStatus.connected ? '已连接，' + deviceStatus.lastSync : '未连接，点击下方按钮模拟搜索和连接')
+          Text(deviceStatus.connected ? '已连接，' + deviceStatus.lastSync : '未连接，请打开手环并靠近手机')
             .fontSize(16)
             .lineHeight(23)
             .fontColor('#52635F')
@@ -117,11 +140,11 @@ struct HealthMetricPage {
         .borderRadius(20)
         .backgroundColor('#0B7A5B')
         .onClick(() => {
-          connectMockDevice();
+          connectHealthDevice();
           this.refreshToken++;
-          promptAction.showToast({ message: '手环已连接，并同步一条异常心率（模拟）' });
+          promptAction.showToast({ message: '手环已连接，并同步一条心率记录' });
         })
-      Text('演示流程：搜索设备 → 连接成功 → 同步心率。当前不调用真实蓝牙接口。')
+      Text('请打开手环并靠近手机，连接后会同步最近健康记录。')
         .fontSize(14)
         .lineHeight(21)
         .fontColor('#667085')
@@ -207,17 +230,17 @@ struct HealthMetricPage {
   @Builder AlertCard() {
     Column({ space: 12 }) {
       Row() {
-        Text(healthAlerts.length > 0 ? '需要关注' : '状态平稳')
+        Text(getElderHealthAlerts().length > 0 ? '需要关注' : '状态平稳')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
-          .fontColor(healthAlerts.length > 0 ? '#B42318' : '#0B7A5B')
+          .fontColor(getElderHealthAlerts().length > 0 ? '#B42318' : '#0B7A5B')
         Blank()
-        Text(healthAlerts.length > 0 ? '已通知家属' : '正常')
+        Text(getElderHealthAlerts().length > 0 ? '已通知家属' : '正常')
           .fontSize(14)
-          .fontColor(healthAlerts.length > 0 ? '#B42318' : '#0B7A5B')
+          .fontColor(getElderHealthAlerts().length > 0 ? '#B42318' : '#0B7A5B')
       }
       .width('100%')
-      Text(healthAlerts.length > 0 ? healthAlerts[0].title + '：' + healthAlerts[0].value + '。建议先坐下休息，几分钟后复测一次。' : '当前没有异常生命体征，继续保持定期记录。')
+      Text(getElderHealthAlerts().length > 0 ? getElderHealthAlerts()[0].title + '：' + getElderHealthAlerts()[0].value + '。建议先坐下休息，几分钟后复测一次。' : '当前没有异常生命体征，继续保持定期记录。')
         .fontSize(16)
         .lineHeight(24)
         .fontColor('#52635F')
@@ -228,7 +251,7 @@ struct HealthMetricPage {
           .fontSize(17)
           .borderRadius(16)
           .backgroundColor('#0B7A5B')
-          .onClick(() => promptAction.showToast({ message: '请休息后重新记录心率（模拟）' }))
+          .onClick(() => this.retestHeartRate())
         Button('联系家属')
           .layoutWeight(1)
           .height(46)
@@ -236,43 +259,50 @@ struct HealthMetricPage {
           .borderRadius(16)
           .fontColor('#B42318')
           .backgroundColor('#FFFFFF')
-          .onClick(() => router.pushUrl({ url: 'pages/FamilyAssistPage' }))
+          .onClick(() => {
+            addCareActionRecord('老人求助', getCurrentElder().name + '在健康页面请求家属协助。', '老人端');
+            promptAction.showToast({ message: '已通知家属' });
+          })
       }
       .width('100%')
     }
     .width('100%')
     .padding(18)
     .borderRadius(22)
-    .backgroundColor(healthAlerts.length > 0 ? '#FFF1F0' : '#E7F5EF')
+    .backgroundColor(getElderHealthAlerts().length > 0 ? '#FFF1F0' : '#E7F5EF')
     .alignItems(HorizontalAlign.Start)
   }
 
   @Builder MetricRow(item: HealthMetric) {
-    Row() {
-      Column({ space: 5 }) {
+    Column({ space: 8 }) {
+      Row() {
         Text(item.name)
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
           .fontColor('#14213D')
-        Text(item.time)
-          .fontSize(14)
-          .fontColor('#667085')
-      }
-      .alignItems(HorizontalAlign.Start)
-      Blank()
-      Column({ space: 4 }) {
-        Text(item.value)
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(item.normal ? '#0B7A5B' : '#B42318')
+        Blank()
         Text(item.normal ? '正常' : '异常')
           .fontSize(14)
           .fontColor(item.normal ? '#0B7A5B' : '#B42318')
-        Text(item.normal ? '继续保持' : '建议复测')
-          .fontSize(13)
-          .fontColor(item.normal ? '#667085' : '#B42318')
+          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+          .borderRadius(14)
+          .backgroundColor(item.normal ? '#E7F5EF' : '#FFF1F0')
       }
-      .alignItems(HorizontalAlign.End)
+      .width('100%')
+      Row() {
+        Text(item.time)
+          .fontSize(14)
+          .fontColor('#667085')
+          .layoutWeight(1)
+        Text(item.value)
+          .fontSize(item.type === 'bloodPressure' ? 15 : 16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(item.normal ? '#0B7A5B' : '#B42318')
+          .maxLines(1)
+          .textAlign(TextAlign.End)
+          .width(118)
+      }
+      .width('100%')
     }
     .width('100%')
     .padding(18)

@@ -1,6 +1,6 @@
 import { router, promptAction } from '@kit.ArkUI';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { addMedicineForElder, currentSession } from '../models/AppData';
+import { addMedicineForElder, currentSession, selectMedicine, startCreatePlanForMedicine } from '../models/AppData';
 
 @Entry
 @Component
@@ -16,13 +16,16 @@ struct AddMedicinePage {
   @State photoUploaded: boolean = false;
   @State photoLabel: string = '药品';
   @State photoColor: string = '#E7F5EF';
+  @State saved: boolean = false;
+  @State savedMedicineName: string = '';
+  @State createdMedicine: boolean = true;
 
   private fillRecognizedMedicine(): void {
     this.name = '硝苯地平控释片';
     this.spec = '30mg x 7片';
     this.dosage = '1片';
     this.stock = '7';
-    this.note = 'AI识别：常用于血压管理。建议每日固定时间服用，具体用法请以医生处方为准。';
+    this.note = '拍照识别：常用于血压管理。建议每日固定时间服用，具体用法请以医生处方为准。';
     this.photoUri = '';
     this.photoUploaded = true;
     this.photoLabel = '降压';
@@ -32,6 +35,24 @@ struct AddMedicinePage {
   private updatePhotoLabelFromName(): void {
     const sourceName: string = this.name === '' ? '药品' : this.name;
     this.photoLabel = sourceName.length >= 2 ? sourceName.substring(0, 2) : sourceName;
+  }
+
+  private isIntegerText(value: string): boolean {
+    if (value === '') {
+      return true;
+    }
+    for (let index = 0; index < value.length; index++) {
+      const char: string = value.charAt(index);
+      if (char < '0' || char > '9') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private goCreatePlan(): void {
+    startCreatePlanForMedicine(this.savedMedicineName);
+    router.pushUrl({ url: 'pages/AddPlanPage' });
   }
 
   private selectMedicinePhoto(): void {
@@ -54,8 +75,20 @@ struct AddMedicinePage {
 
   private saveMedicine(): void {
     const stockValue: number = this.stock === '' ? 0 : Number(this.stock);
-    addMedicineForElder(this.name, this.spec, this.dosage, stockValue, this.note, this.photoUri, this.photoLabel, this.photoColor, this.photoUploaded);
-    promptAction.showToast({ message: currentSession.role === 'guardian' ? '已替老人保存药品（模拟）' : '已保存到常用药（模拟）' });
+    if (this.name === '') {
+      promptAction.showToast({ message: '请填写药品名称' });
+      return;
+    }
+    if (!this.isIntegerText(this.stock) || stockValue < 0) {
+      promptAction.showToast({ message: '请输入正确库存数量' });
+      return;
+    }
+    const created: boolean = addMedicineForElder(this.name, this.spec, this.dosage, stockValue, this.note, this.photoUri, this.photoLabel, this.photoColor, this.photoUploaded);
+    selectMedicine(this.name);
+    this.savedMedicineName = this.name;
+    this.createdMedicine = created;
+    this.saved = true;
+    promptAction.showToast({ message: created ? (currentSession.role === 'guardian' ? '已替老人保存药品' : '已保存到常用药') : '已更新药品信息' });
   }
 
   build() {
@@ -64,7 +97,7 @@ struct AddMedicinePage {
         this.Header(currentSession.role === 'guardian' ? '替老人添加药品' : '新增药品')
         this.AiCaptureCard()
         this.PhotoUploadCard()
-        Button('进入 AI 用药助手')
+        Button('看不懂药？去问药求助')
           .width('100%')
           .height(48)
           .borderRadius(18)
@@ -95,15 +128,19 @@ struct AddMedicinePage {
           this.note = value;
         })
 
-        Button('保存到常用药')
-          .width('100%')
-          .height(54)
-          .fontSize(19)
-          .borderRadius(20)
-          .backgroundColor('#0B7A5B')
-          .onClick(() => this.saveMedicine())
+        if (this.saved) {
+          this.SavedNextStepCard()
+        } else {
+          Button('保存到常用药')
+            .width('100%')
+            .height(54)
+            .fontSize(19)
+            .borderRadius(20)
+            .backgroundColor('#0B7A5B')
+            .onClick(() => this.saveMedicine())
+        }
 
-        Text('提示：AI 识别只能辅助录入，最终药名、剂量和服用方式应由本人或监护人与医生处方核对。')
+        Text('提示：拍照识别只能辅助录入，最终药名、剂量和服用方式应由本人或监护人与医生处方核对。')
           .fontSize(13)
           .lineHeight(20)
           .fontColor('#667085')
@@ -153,8 +190,8 @@ struct AddMedicinePage {
         }
         .alignItems(HorizontalAlign.Start)
         Blank()
-        Text('AI')
-          .fontSize(16)
+        Text('拍照')
+          .fontSize(14)
           .fontWeight(FontWeight.Bold)
           .fontColor('#FFFFFF')
           .width(44)
@@ -188,7 +225,7 @@ struct AddMedicinePage {
           .onClick(() => {
             this.fillRecognizedMedicine();
             this.aiRecognized = true;
-            promptAction.showToast({ message: '已模拟从相册识别药品' });
+            promptAction.showToast({ message: '已从相册识别药品' });
           })
       }
       .width('100%')
@@ -301,18 +338,63 @@ struct AddMedicinePage {
           .height(42)
           .backgroundColor('#FFFFFF')
           .fontColor('#0B7A5B')
-          .onClick(() => promptAction.showToast({ message: '请重新拍摄药盒正面（模拟）' }))
+          .onClick(() => {
+            this.recognizing = true;
+            this.fillRecognizedMedicine();
+            this.recognizing = false;
+            promptAction.showToast({ message: '已重新识别药盒文字' });
+          })
         Button('确认无误')
           .layoutWeight(1)
           .height(42)
           .backgroundColor('#0B7A5B')
-          .onClick(() => promptAction.showToast({ message: '已确认识别结果' }))
+          .onClick(() => {
+            this.aiRecognized = false;
+            promptAction.showToast({ message: '已确认识别结果' });
+          })
       }
       .width('100%')
     }
     .width('100%')
     .padding(16)
     .borderRadius(18)
+    .backgroundColor('#FFFFFF')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder SavedNextStepCard() {
+    Column({ space: 12 }) {
+      Text(this.createdMedicine ? '药品已保存' : '药品已更新')
+        .fontSize(21)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#14213D')
+      Text('接下来可以为“' + this.savedMedicineName + '”设置服药时间。设置后，它会自动出现在今日服药监督和服药追踪里。')
+        .fontSize(15)
+        .lineHeight(22)
+        .fontColor('#52635F')
+      Row({ space: 10 }) {
+        Button('设置服药计划')
+          .layoutWeight(1)
+          .height(48)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .borderRadius(16)
+          .backgroundColor('#0B7A5B')
+          .onClick(() => this.goCreatePlan())
+        Button('返回药品页')
+          .layoutWeight(1)
+          .height(48)
+          .fontSize(17)
+          .borderRadius(16)
+          .fontColor('#0B7A5B')
+          .backgroundColor('#E7F5EF')
+          .onClick(() => router.back())
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(18)
+    .borderRadius(22)
     .backgroundColor('#FFFFFF')
     .alignItems(HorizontalAlign.Start)
   }

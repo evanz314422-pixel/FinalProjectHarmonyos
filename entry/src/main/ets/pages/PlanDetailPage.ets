@@ -1,27 +1,45 @@
 import { router, promptAction } from '@kit.ArkUI';
+import { deleteSelectedPlan, getSelectedPlan, MedicationPlan, setSelectedPlanEnabled, startEditSelectedPlan } from '../models/AppData';
 
 @Entry
 @Component
 struct PlanDetailPage {
   @State planEnabled: boolean = true;
 
+  private currentPlan(): MedicationPlan {
+    return getSelectedPlan();
+  }
+
+  private deletePlan(): void {
+    const removedName: string = deleteSelectedPlan();
+    promptAction.showToast({ message: '已删除' + removedName + '用药计划' });
+    router.back();
+  }
+
   build() {
     Scroll() {
       Column({ space: 16 }) {
         this.Header('计划详情')
         Column({ space: 14 }) {
-          Text('二甲双胍片长期计划').fontSize(24).fontWeight(FontWeight.Bold)
-          Text('每日 3 次：08:00、12:30、18:30').fontSize(16)
-          Text('每次 1 片，餐后服用').fontSize(16)
+          Text(this.currentPlan().medicineName + '长期计划').fontSize(24).fontWeight(FontWeight.Bold)
+          Text('每日 ' + this.currentPlan().times.length.toString() + ' 次：' + this.currentPlan().times.join('、')).fontSize(16)
+          Text('每次 ' + this.currentPlan().dosage + '，' + this.currentPlan().mealTime + '服用').fontSize(16)
           Row() {
             Text('计划状态').fontSize(17)
             Blank()
-            Toggle({ type: ToggleType.Switch, isOn: this.planEnabled })
-              .onChange((value: boolean) => { this.planEnabled = value; })
+            Toggle({ type: ToggleType.Switch, isOn: this.currentPlan().enabled })
+              .onChange((value: boolean) => {
+                setSelectedPlanEnabled(value);
+                this.planEnabled = value;
+                promptAction.showToast({ message: value ? '计划已启用，今日记录已同步' : '计划已暂停，未完成提醒已移除' });
+              })
           }.width('100%')
-          Button('修改计划').width('100%').onClick(() => router.pushUrl({ url: 'pages/AddPlanPage' }))
+          Button('修改计划').width('100%').onClick(() => {
+            startEditSelectedPlan();
+            router.pushUrl({ url: 'pages/AddPlanPage' });
+          })
           Button('删除计划').width('100%').backgroundColor('#B42318')
-            .onClick(() => promptAction.showDialog({ title: '删除计划', message: '课堂演示中仅模拟删除操作。' }))
+            .onClick(() => this.deletePlan())
         }
         .width('100%')
         .padding(18)

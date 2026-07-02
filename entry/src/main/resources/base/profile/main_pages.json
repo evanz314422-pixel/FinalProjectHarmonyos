@@ -12,10 +12,8 @@
     "pages/ReminderDetailPage",
     "pages/CheckInPage",
     "pages/HistoryPage",
-    "pages/StatsPage",
     "pages/InventoryPage",
     "pages/HealthMetricPage",
-    "pages/FamilyAssistPage",
     "pages/SettingsPage"
   ]
 }
